@@ -15,7 +15,14 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
     enum ButtonState: Equatable { case hidden, disabled, enabled }
     @Published private(set) var button: ButtonState = .hidden
 
+    /// Video mode hooks in here: a report arrived / the page asked for fullscreen on a video.
+    var onChange: (() -> Void)?
+    var onFullscreen: ((_ frame: String, _ index: Int) -> Void)?
+    weak var webView: WKWebView?
+
     private(set) var tracker = VideoTracker()
+    /// Where each reporting frame lives, so a command can run in the frame that holds the video.
+    private var frames: [String: WKFrameInfo] = [:]
     private(set) var log: [String] = []
     private var pageURL: URL?
     private var lastLogKey = ""
@@ -28,6 +35,13 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
         return WKUserScript(source: src, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: world)
     }
 
+    /// Page-world hook that turns the page's fullscreen requests into a DOM event (see the file).
+    static func makeFullscreenHook() -> WKUserScript? {
+        guard let u = Bundle.main.url(forResource: "fullscreen-hook", withExtension: "js"),
+              let src = try? String(contentsOf: u, encoding: .utf8) else { return nil }
+        return WKUserScript(source: src, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page)
+    }
+
     func attach(to ucc: WKUserContentController, scriptLoaded: Bool) {
         ucc.add(self, contentWorld: Self.world, name: Self.handlerName)
         if !scriptLoaded { note("video-detect.js missing from the app bundle") }
@@ -37,6 +51,7 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
     /// the script keeps reporting and only the page URL, hence the video identity, changes.
     func reset() {
         tracker.reset()
+        frames = [:]
         publish()
     }
 
@@ -45,18 +60,36 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == Self.handlerName, let json = message.body as? String,
               let msg = VideoMessage.parse(json) else { return }
+        switch msg {
+        case let .videos(frame, _): frames[frame] = message.frameInfo
+        case let .gone(frame): frames[frame] = nil
+        case let .fullscreen(frame, index):
+            note("page asked for fullscreen (video \(index) in \(frame.prefix(4)))")
+            onFullscreen?(frame, index)
+            return
+        }
         tracker.apply(msg, isMainFrame: message.frameInfo.isMainFrame)
         publish()
+        onChange?()
         logPrimary(nil)
+    }
+
+    /// Runs one of the fixed commands of `video-detect.js` (`window.__nvCmd`) in the video's frame.
+    /// Only the command name is a string; the argument is a number.
+    func command(frame: String, index: Int, _ cmd: String, _ arg: Double = 0) {
+        guard let info = frames[frame], let webView, arg.isFinite else { note("\(cmd): frame is gone"); return }
+        webView.evaluateJavaScript("window.__nvCmd(\(index), '\(cmd)', \(arg))", in: info, in: Self.world) { [weak self] r in
+            switch r {
+            case .failure(let e): self?.note("\(cmd) failed: \(e.localizedDescription)")
+            case .success(let ok): if (ok as? Bool) == false { self?.note("\(cmd): video is gone") }
+            }
+        }
     }
 
     private func publish() {
         let new: ButtonState = !tracker.hasCandidate ? .hidden : tracker.primary == nil ? .disabled : .enabled
         if new != button { button = new }
     }
-
-    /// Phase 3 has no video mode yet (Phase 4): the button just logs what it would open.
-    func buttonTapped() { logPrimary("button tapped", force: true) }
 
     func logPrimary(_ why: String?, force: Bool = false) {
         guard let p = tracker.primary else {
@@ -76,7 +109,7 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
              + "\(e.playing ? "playing" : "paused") pos=\(String(format: "%.1f", e.pos)) dur=\(dur)\n    \(id?.page ?? "?")")
     }
 
-    private func note(_ s: String) {
+    func note(_ s: String) {
         let t = Date().formatted(date: .omitted, time: .standard)
         log.append("\(t) \(s)")
         if log.count > 200 { log.removeFirst(log.count - 200) }

@@ -20,6 +20,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     let webView: WKWebView
     let blocker: Blocker
     let detector: VideoDetector
+    let videoMode: VideoMode
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -32,7 +33,10 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         let det = VideoDetector()
         det.attach(to: cfg.userContentController, scriptLoaded: videoScript != nil)
         detector = det
-        blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: videoScript.map { [$0] } ?? [])
+        let scripts = [videoScript, VideoDetector.makeFullscreenHook()].compactMap { $0 }
+        blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: scripts)
+        det.webView = webView
+        videoMode = VideoMode(detector: det, webView: webView)
         super.init()
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -70,7 +74,11 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         if let u = AddressInput.resolve(text, searchTemplate: template) { load(u) }
     }
 
-    func load(_ url: URL) { webView.load(URLRequest(url: url)) }
+    /// An explicit load (address bar, deep link) ends video mode first: the lock only stops pages from navigating.
+    func load(_ url: URL) {
+        videoMode.exit()
+        webView.load(URLRequest(url: url))
+    }
     func goBack() { webView.goBack() }
     func goForward() { webView.goForward() }
     func stop() { webView.stopLoading() }
@@ -96,6 +104,11 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// Fail closed: only web pages load. `tel:`, `file:`, app-store schemes and the like are
     /// cancelled, and a page cannot navigate the top frame to a `data:` document.
     func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
+        // Video mode lock: the page cannot navigate the main frame or open windows (popups, redirects).
+        if videoMode.active, action.targetFrame?.isMainFrame ?? true {
+            detector.note("locked: cancelled \(action.request.url?.absoluteString.prefix(80) ?? "?")")
+            return .cancel
+        }
         guard let scheme = action.request.url?.scheme?.lowercased() else { return .allow }
         if action.targetFrame?.isMainFrame == true, scheme == "http" || scheme == "https" {
             blocker.apply(for: action.request.url)
@@ -124,14 +137,17 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         failure = (ns.localizedDescription, ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
     }
 
-    func webViewWebContentProcessDidTerminate(_ w: WKWebView) { w.reload() }
+    func webViewWebContentProcessDidTerminate(_ w: WKWebView) {
+        videoMode.exit()
+        w.reload()
+    }
 
     // MARK: WKUIDelegate
 
     /// `target=_blank` and `window.open` load in the same view (decisions.md).
     func webView(_ w: WKWebView, createWebViewWith cfg: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if action.targetFrame == nil { w.load(action.request) }
+        if action.targetFrame == nil && !videoMode.active { w.load(action.request) }
         return nil
     }
 }

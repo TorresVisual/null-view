@@ -12,6 +12,7 @@ struct BrowserView: View {
     @ObservedObject var model: BrowserModel
     @ObservedObject var blocker: Blocker
     @ObservedObject var detector: VideoDetector
+    @ObservedObject var videoMode: VideoMode
     @Environment(\.scenePhase) private var scenePhase
     @State private var text = ""
     @FocusState private var editing: Bool
@@ -22,16 +23,20 @@ struct BrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            addressBar
+            if !videoMode.active { addressBar }
             ZStack {
                 WebViewHost(webView: model.webView)
-                if let f = model.failure { errorView(f.message) }
+                if videoMode.active { VideoModeView(mode: videoMode) }
+                else if let f = model.failure { errorView(f.message) }
                 else if model.url == nil && !model.isLoading { startView }
                 else if detector.button != .hidden { videoButton }
             }
-            if clipboardOffer { clipboardBar }
-            toolbar
+            if clipboardOffer && !videoMode.active { clipboardBar }
+            if !videoMode.active { toolbar }
         }
+        .ignoresSafeArea(videoMode.active ? .all : [])
+        .statusBarHidden(videoMode.active)
+        .persistentSystemOverlays(videoMode.active ? .hidden : .automatic)
         .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker, detector: detector) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }
@@ -95,14 +100,14 @@ struct BrowserView: View {
         .background(.bar)
     }
 
-    /// Floating button. Phase 4 makes it open video mode; for now it logs the primary video.
+    /// Floating button: opens video mode on the primary video.
     /// Disabled when nothing is controllable (DRM, no source): the page stays a plain browser.
     private var videoButton: some View {
         VStack {
             Spacer()
             HStack {
                 Spacer()
-                Button { detector.buttonTapped() } label: {
+                Button { videoMode.enter() } label: {
                     Image(systemName: "play.rectangle.fill").font(.title2).padding(14)
                         .background(.regularMaterial, in: Circle())
                 }

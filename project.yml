@@ -19,6 +19,8 @@ targets:
         buildPhase: resources
       - path: js/src/video-detect.js # injected as-is into the isolated content world
         buildPhase: resources
+      - path: js/src/fullscreen-hook.js # injected as-is into the page world (fullscreen requests -> DOM event)
+        buildPhase: resources
     dependencies:
       - package: NullViewCore
       - package: SafariConverterLib
