@@ -28,10 +28,88 @@ public struct AllowList: Codable, Equatable {
     public mutating func remove(_ host: String) { hosts.removeAll { $0 == host } }
 }
 
-public struct FilterList: Equatable {
+public struct FilterList: Codable, Equatable {
     public let id: String
     public let name: String
     public let url: URL
+}
+
+/// Which filter lists are on, plus the lists the user added by URL.
+public struct FilterConfig: Codable, Equatable {
+    public private(set) var enabled: Set<String>
+    public private(set) var custom: [FilterList]
+
+    public init(enabled: Set<String> = Set(Filters.defaults.map(\.id)), custom: [FilterList] = []) {
+        self.enabled = enabled
+        self.custom = custom
+    }
+
+    public var all: [FilterList] { Filters.builtIn + custom }
+    public var active: [FilterList] { all.filter { enabled.contains($0.id) } }
+    public func isEnabled(_ id: String) -> Bool { enabled.contains(id) }
+    public func isCustom(_ id: String) -> Bool { custom.contains { $0.id == id } }
+
+    public mutating func setEnabled(_ id: String, _ on: Bool) {
+        guard all.contains(where: { $0.id == id }) else { return }
+        if on { enabled.insert(id) } else { enabled.remove(id) }
+    }
+
+    /// https only: a list over plain http could be swapped in transit, and lists inject rules into every page.
+    /// Returns nil for a bad or duplicate URL. The new list starts enabled.
+    @discardableResult
+    public mutating func addCustom(name: String, urlText: String) -> FilterList? {
+        guard let url = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme?.lowercased() == "https", let host = url.host, !host.isEmpty,
+              !all.contains(where: { $0.url == url }) else { return nil }
+        let title = name.trimmingCharacters(in: .whitespaces)
+        let list = FilterList(id: "url-" + Self.hash(url.absoluteString), name: title.isEmpty ? host : title, url: url)
+        custom.append(list)
+        enabled.insert(list.id)
+        return list
+    }
+
+    public mutating func removeCustom(_ id: String) {
+        custom.removeAll { $0.id == id }
+        enabled.remove(id)
+    }
+
+    /// FNV-1a: stable across launches and platforms (`hashValue` is not).
+    private static func hash(_ s: String) -> String {
+        var h: UInt64 = 0xcbf29ce484222325
+        for b in s.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+        return String(h, radix: 16)
+    }
+}
+
+/// Windows a page opens: `target=_blank` links and `window.open`.
+public enum PopupPolicy {
+    /// Whether to load a page-opened window in the view. A tapped link is the user's own doing. A script
+    /// opening a window is how popunder ads work, so it only gets through to the page's own site (and an
+    /// allowlisted site is decided by the caller). ponytail: a script that clicks a hidden `<a target=_blank>`
+    /// looks like a link tap to WebKit and passes. Upgrade path: the AdGuard Popups list, or a private
+    /// `_userInitiated` check.
+    public static func allows(linkTap: Bool, from page: URL?, to target: URL?) -> Bool {
+        linkTap || sameSite(page?.host, target?.host)
+    }
+
+    /// The same host, or one is a subdomain of the other (`m.example.com` and `example.com`).
+    public static func sameSite(_ a: String?, _ b: String?) -> Bool {
+        guard let x = AllowList.normalize(a), let y = AllowList.normalize(b) else { return false }
+        return x == y || x.hasSuffix("." + y) || y.hasSuffix("." + x)
+    }
+}
+
+/// A "hide this element" rule built from the picker's selector.
+public enum ElementRule {
+    /// Plain CSS selectors only (tags, ids, classes, `>`, `:nth-of-type`). The picker never produces more, and
+    /// the charset keeps a stray `+js(`, `#%#` or newline from turning one rule into a script rule.
+    public static func line(host: String?, selector: String) -> String? {
+        guard let h = AllowList.normalize(host), !selector.isEmpty, selector.count <= 400,
+              let f = selector.first, f.isLetter || f == "#" || f == ".",
+              selector.allSatisfy({ ($0.isASCII && ($0.isLetter || $0.isNumber)) || "_-#.>:() ".contains($0) })
+        else { return nil }
+        return "\(h)##\(selector)"
+    }
 }
 
 public enum Filters {
@@ -44,7 +122,17 @@ public enum Filters {
                    url: URL(string: "https://filters.adtidy.org/ios/filters/11_optimized.txt")!),
     ]
 
-    /// Lists are refreshed at launch when older than this (no background refresh).
+    /// Off until the user turns them on. Separate lists, so a site that breaks can be traced to one of them.
+    public static let optional: [FilterList] = [
+        FilterList(id: "adguard-cookies", name: "AdGuard Cookie Notices",
+                   url: URL(string: "https://filters.adtidy.org/ios/filters/18_optimized.txt")!),
+        FilterList(id: "adguard-popups", name: "AdGuard Popups",
+                   url: URL(string: "https://filters.adtidy.org/ios/filters/19_optimized.txt")!),
+    ]
+
+    public static let builtIn = defaults + optional
+
+    /// Lists are refreshed at launch and when the app returns to the front, if older than this.
     public static let maxAge: TimeInterval = 24 * 3600
 
     /// A missing date (never updated) counts as stale.
