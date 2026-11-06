@@ -169,3 +169,15 @@ test('the page asking for fullscreen is swallowed for a drivable video, passed t
   await settle(200);
   assert.equal(msgs.filter((m) => m.type === 'fullscreen').length, 1);
 });
+
+test('the page never sees itself hidden, so sites do not pause on background', async () => {
+  await load('<p>hi</p>');
+  const r = await page.evaluate(() => {
+    let heard = 0;
+    document.addEventListener('visibilitychange', () => heard++);
+    addEventListener('visibilitychange', () => heard++);
+    document.dispatchEvent(new Event('visibilitychange'));
+    return [heard, document.hidden, document.visibilityState];
+  });
+  assert.deepEqual(r, [0, false, 'visible']);
+});
