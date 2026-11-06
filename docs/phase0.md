@@ -13,7 +13,7 @@ The spike app is a single screen, not the real app. It exists to answer the five
 | Gate | How | Pass |
 |---|---|---|
 | 1 Blocking | Tap "1 Compile lists", wait for "advanced engine built". Then tap "1+2 Block/cosmetic test". | The log shows EasyList and EasyPrivacy compiled, and all four ad URLs say `blocked` while `control` says `ok`. Also note conversion time, `discarded` and `errors`. |
-| 2 Cosmetic and scriptlets | Same test run. | `cosmetic_h1_bg` is `rgb(255, 0, 0)` and `scriptlet_nvScriptletTest` is `true`. |
+| 2 Cosmetic and scriptlets | Same test run. | `cosmetic_body_bg` is `rgb(255, 0, 0)` and `scriptlet_nvScriptletTest` is `true`. |
 | 3 PiP | Tap "3+4 Video page", press play, then the PiP button. | The video floats in PiP and the page's own buttons still control it. |
 | 4 Background audio | Play, then lock the screen or switch apps. | Audio keeps playing. |
 | 5 URL scheme | Make a Shortcut with action "Open URLs" set to `nullview://open?url=https://example.com`. Run it. | The app opens, the log shows `5: received ...`, and example.com loads. |

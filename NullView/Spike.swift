@@ -17,7 +17,7 @@ final class Spike: NSObject, ObservableObject, WKNavigationDelegate {
 
     // Gate 2 fixtures: advanced-only rules (CSS injection + scriptlet) targeting example.com.
     private static let testRules = [
-        "example.com#$#h1 { background-color: rgb(255, 0, 0) !important; }",
+        "example.com#$#body { background-color: rgb(255, 0, 0) !important; }",
         "example.com#%#//scriptlet('set-constant', 'nvScriptletTest', 'true')",
     ]
     private static let lists: [(id: String, url: String)] = [
@@ -104,8 +104,9 @@ final class Spike: NSObject, ObservableObject, WKNavigationDelegate {
         }
         try { await fetch('https://example.org/', {mode: 'no-cors', cache: 'no-store'}); out.control = 'ok'; }
         catch (e) { out.control = 'FAILED (network?)'; }
-        const h1 = document.querySelector('h1');
-        out.cosmetic_h1_bg = h1 ? getComputedStyle(h1).backgroundColor : 'no h1';
+        out.page_title = document.title;
+        out.style_tags = document.querySelectorAll('style').length;
+        out.cosmetic_body_bg = document.body ? getComputedStyle(document.body).backgroundColor : 'no body';
         out.scriptlet_nvScriptletTest = String(window.nvScriptletTest);
         return out;
         """
@@ -113,7 +114,7 @@ final class Spike: NSObject, ObservableObject, WKNavigationDelegate {
             let res = try await webView.callAsyncJavaScript(js, contentWorld: .page)
             let data = try JSONSerialization.data(withJSONObject: res ?? [:], options: [.prettyPrinted, .sortedKeys])
             say(String(decoding: data, as: UTF8.self))
-            say("expect: ads=blocked, control=ok, h1 bg rgb(255, 0, 0), scriptlet=true")
+            say("expect: ads=blocked, control=ok, body bg rgb(255, 0, 0), scriptlet=true")
         } catch { say("page test FAILED \(error)") }
     }
 

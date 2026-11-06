@@ -1,19 +1,29 @@
 <!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{font:14px -apple-system;margin:8px}video{width:100%;background:#000}button{font-size:16px;padding:8px 14px}</style>
-<video id="v" playsinline src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"></video>
-<p><button id="play">Play / Pause</button> <button id="pip">PiP</button></p>
+<style>body{font:14px -apple-system;margin:8px}video{width:100%;background:#000}button{font-size:16px;padding:8px 12px;margin:2px}</style>
+<video id="v" playsinline loop></video>
+<p>
+  <button id="hls">Load HLS (audio)</button> <button id="mp4">Load MP4</button><br>
+  <button id="play">Play / Pause</button> <button id="pip">PiP</button>
+</p>
 <pre id="s"></pre>
 <script>
 const v = document.getElementById('v'), s = document.getElementById('s');
 const say = t => s.textContent += t + '\n';
-say('webkitSupportsPresentationMode(pip): ' + (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')));
-say('pictureInPictureEnabled: ' + document.pictureInPictureEnabled);
+const HLS = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8';
+const MP4 = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+const support = () => say('pip supported: ' + (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')) + ' (readyState ' + v.readyState + ')');
+const load = src => { say('loading ' + src.split('/').pop()); v.src = src; v.load(); };
+say('document.pictureInPictureEnabled: ' + document.pictureInPictureEnabled);
+v.addEventListener('loadedmetadata', support);
 v.addEventListener('webkitpresentationmodechanged', () => say('mode: ' + v.webkitPresentationMode));
-v.addEventListener('error', () => say('video error ' + (v.error && v.error.code)));
+v.addEventListener('error', () => say('video error code ' + (v.error && v.error.code)));
+document.getElementById('hls').onclick = () => load(HLS);
+document.getElementById('mp4').onclick = () => load(MP4);
 document.getElementById('play').onclick = () => (v.paused ? v.play() : v.pause());
 document.getElementById('pip').onclick = () => {
   try { v.webkitSetPresentationMode(v.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture'); }
   catch (e) { say('pip error: ' + e); }
 };
+load(HLS);
 </script>
