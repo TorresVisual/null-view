@@ -7,7 +7,7 @@ Settled in a grilling session on 2026-11-06. This file **overrides** `docs/brief
 - Owner uses an **iPhone on iOS 26.6.2** and a **Windows PC**. There is **no Mac and no Xcode**.
 - Free Apple ID only (no paid developer account). The free account has 3 active-app slots, and **AltStore plus another app the owner built already use them**. Anything needing an extra app ID (share extension, widgets) is out.
 - Personal use, sideloaded via AltStore (re-signs every 7 days). No App Store, no store-policy work.
-- **Phase 0 passed on 2026-11-06** (see `docs/phase0-results.md`). Phase 1 (browser foundation) is written: `Core/` plus the SwiftUI shell in `NullView/`. It built on the runner and **passed the owner's phone test on 2026-11-06**. The spike is in git history. Phase 2 (content blocking) is written (`Blocker`, allowlist, custom rules, 24 h refresh) and waits for its first runner build and phone test. Rule-cap splitting was skipped: each source list compiles to its own `WKContentRuleList`, so the cap applies per list, and the converter reports discarded rules if a list ever exceeds it.
+- **Phase 0 passed on 2026-11-06** (see `docs/phase0-results.md`). Phase 1 (browser foundation) is written: `Core/` plus the SwiftUI shell in `NullView/`. It built on the runner and **passed the owner's phone test on 2026-11-06**. The spike is in git history. Phase 2 (content blocking) is written (`Blocker`, allowlist, custom rules, 24 h refresh) and **passed the owner's phone test on 2026-11-06**. **Next step: Phase 3** (video detection). Rule-cap splitting was skipped: each source list compiles to its own `WKContentRuleList`, so the cap applies per list, and the converter reports discarded rules if a list ever exceeds it.
 
 ## Platform and stack
 
