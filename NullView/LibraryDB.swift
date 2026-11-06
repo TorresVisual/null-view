@@ -5,7 +5,7 @@ import NullViewCore
 /// `LibraryStore` on SQLite via GRDB (decisions.md "Persistence and library"). Dumb storage only:
 /// every rule is in `NullViewCore.Library`, which is tested on Windows. This file can only be
 /// compiled on the runner (GRDB needs a system SQLite).
-final class LibraryDB: LibraryStore {
+final class LibraryDB: LibraryStore, SiteStore {
     private let db: DatabaseQueue
 
     init() throws {
@@ -23,6 +23,7 @@ final class LibraryDB: LibraryStore {
                     """)
             }
             try db.execute(sql: "CREATE TABLE IF NOT EXISTS queue (n INTEGER PRIMARY KEY AUTOINCREMENT, page TEXT NOT NULL)")
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS site (url TEXT PRIMARY KEY, name TEXT NOT NULL, opens INTEGER NOT NULL, at REAL NOT NULL)")
         }
     }
 
@@ -80,4 +81,19 @@ final class LibraryDB: LibraryStore {
         run("INSERT OR REPLACE INTO \(table) (page, title, poster, at) VALUES (?, ?, ?, ?)",
             [p.page, p.title, p.poster, p.date.timeIntervalSince1970])
     }
+}
+
+// MARK: SiteStore (saved-sites launcher, issue #12)
+
+extension LibraryDB {
+    func sites() -> [SavedSite] {
+        rows("SELECT * FROM site").map {
+            SavedSite(url: $0["url"], name: $0["name"], opens: $0["opens"], lastOpened: Date(timeIntervalSince1970: $0["at"]))
+        }
+    }
+    func saveSite(_ s: SavedSite) {
+        run("INSERT OR REPLACE INTO site (url, name, opens, at) VALUES (?, ?, ?, ?)",
+            [s.url, s.name, s.opens, s.lastOpened.timeIntervalSince1970])
+    }
+    func deleteSite(url: String) { run("DELETE FROM site WHERE url = ?", [url]) }
 }

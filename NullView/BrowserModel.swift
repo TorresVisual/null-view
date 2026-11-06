@@ -23,6 +23,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     let detector: VideoDetector
     let videoMode: VideoMode
     let watch: WatchState
+    let sites: Sites
     nonisolated static let lastURLKey = "lastURL"
     private var cancellables: Set<AnyCancellable> = []
 
@@ -40,7 +41,10 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: scripts)
         det.webView = webView
         videoMode = VideoMode(detector: det, webView: webView)
-        let store: LibraryStore = (try? LibraryDB()) ?? MemoryLibraryStore()
+        let db = try? LibraryDB()
+        let store: LibraryStore = db ?? MemoryLibraryStore()
+        let siteStore: SiteStore = db ?? MemorySiteStore()
+        sites = Sites(store: siteStore)
         let ws = WatchState(library: Library(store: store), detector: det, videoMode: videoMode, webView: webView)
         watch = ws
         det.onReport = { [weak ws] in ws?.onReport() }

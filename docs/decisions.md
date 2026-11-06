@@ -77,6 +77,7 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 ## App layout
 
 - The browser is the home screen. **Library** (Continue Watching, Watch Later, History, Queue) and **Settings** are sheets opened from the bottom toolbar. Video mode is a full-screen cover over the browser.
+- **Sites** (issue #12): a grid of hand-added platforms, most opened first. It fills the blank start page and opens as a sheet from the toolbar. Rules in `Core/.../Sites.swift`, storage in `LibraryDB.swift`, UI in `NullView/SitesView.swift`.
 
 ## Sharing and links
 

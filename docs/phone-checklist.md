@@ -28,6 +28,12 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] Watch Later add/remove, queue add, reorder, clear. When a video ends, the queue plays the next page.
 - [ ] History shows visited pages; search, sort and site filter work.
 
+## Sites
+- [ ] Blank start page shows "Add site". Add youtube.com: a tile appears; "cute cats" is rejected.
+- [ ] Tap the tile: the site loads. Force-quit and reopen: the tile is still there.
+- [ ] Open a second site twice: it moves in front of the first. Long-press a tile, Remove: it is gone.
+- [ ] The Sites button in the bottom toolbar opens the same grid as a sheet; tapping a tile closes it and loads the site.
+
 ## Sharing
 - [ ] The Shortcut from Settings > Sharing opens a shared link in the app.
 - [ ] Copy a link, reopen the app: "Link on clipboard" banner, Open loads it.

@@ -19,6 +19,7 @@ struct BrowserView: View {
     @FocusState private var editing: Bool
     @State private var showSettings = false
     @State private var showLibrary = false
+    @State private var showSites = false
     /// Pasteboard change count we already offered or dismissed.
     @State private var handledPasteboard = UIPasteboard.general.changeCount
     @State private var clipboardOffer = false
@@ -43,6 +44,7 @@ struct BrowserView: View {
         .statusBarHidden(videoMode.active)
         .persistentSystemOverlays(videoMode.active ? .hidden : .automatic)
         .sheet(isPresented: $showLibrary) { LibraryView(model: model) }
+        .sheet(isPresented: $showSites) { SitesSheet(model: model) }
         .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker, detector: detector) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }
@@ -109,6 +111,8 @@ struct BrowserView: View {
             }
             .disabled(model.url == nil)
             Spacer()
+            tool("square.grid.2x2", "Sites") { showSites = true }
+            Spacer()
             tool("books.vertical", "Library") { showLibrary = true }
             Spacer()
             tool(blocker.hasError ? "exclamationmark.triangle" : "gearshape",
@@ -138,13 +142,12 @@ struct BrowserView: View {
     }
 
     private var startView: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "globe").font(.system(size: 44))
-            Text("Enter an address or search").font(.headline)
-            Text("To open links from other apps, set up the Shortcut described in Settings under Sharing.")
-                .font(.footnote).multilineTextAlignment(.center).padding(.horizontal, 32).padding(.top, 8)
+        VStack(spacing: 0) {
+            SitesGrid(model: model)
+            Text("Add the sites you use most, then open them in one tap. To open links from other apps, set up the Shortcut described in Settings under Sharing.")
+                .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.secondary)
+                .padding(.horizontal, 32).padding(.vertical, 12)
         }
-        .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
     }
