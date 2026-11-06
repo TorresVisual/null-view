@@ -38,12 +38,16 @@ final class Blocker: ObservableObject {
     private var currentURL: URL?
     private let dir: URL
     private let bundleJS: String
+    /// Other user scripts (video detection). `removeAllUserScripts()` has no per-script variant,
+    /// so they are re-added every time the blocker resets the scripts.
+    private let persistentScripts: [WKUserScript]
 
     var hasError: Bool { !errors.isEmpty }
     private var ids: [String] { Filters.defaults.map(\.id) + [Self.customID] }
 
-    init(userContentController: WKUserContentController) {
+    init(userContentController: WKUserContentController, persistentScripts: [WKUserScript] = []) {
         ucc = userContentController
+        self.persistentScripts = persistentScripts
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("blocker", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -107,8 +111,8 @@ final class Blocker: ObservableObject {
             if on { compiled.values.forEach { ucc.add($0) } }
             attached = on
         }
-        // ponytail: removes every user script. Phase 3's video scripts must be re-added here.
         ucc.removeAllUserScripts()
+        persistentScripts.forEach { ucc.addUserScript($0) }
         guard on, !bundleJS.isEmpty, let url, ["http", "https"].contains(url.scheme),
               let c = engine?.lookup(pageUrl: url, topUrl: nil) else { return }
         let cfg: [String: Any] = [

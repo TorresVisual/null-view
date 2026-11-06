@@ -17,6 +17,8 @@ targets:
       - NullView
       - path: js/dist/adblock-content.js # built by CI (js job) or `cd js && npm run build`
         buildPhase: resources
+      - path: js/src/video-detect.js # injected as-is into the isolated content world
+        buildPhase: resources
     dependencies:
       - package: NullViewCore
       - package: SafariConverterLib

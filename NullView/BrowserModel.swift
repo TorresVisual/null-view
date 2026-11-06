@@ -19,6 +19,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     let webView: WKWebView
     let blocker: Blocker
+    let detector: VideoDetector
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -27,7 +28,11 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         cfg.mediaTypesRequiringUserActionForPlayback = []
         cfg.allowsPictureInPictureMediaPlayback = true
         webView = WKWebView(frame: .zero, configuration: cfg)
-        blocker = Blocker(userContentController: cfg.userContentController)
+        let videoScript = VideoDetector.makeScript()
+        let det = VideoDetector()
+        det.attach(to: cfg.userContentController, scriptLoaded: videoScript != nil)
+        detector = det
+        blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: videoScript.map { [$0] } ?? [])
         super.init()
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -53,6 +58,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         canGoForward = webView.canGoForward
         isLoading = webView.isLoading
         progress = webView.estimatedProgress
+        detector.setURL(webView.url)
     }
 
     // MARK: Actions
@@ -102,6 +108,9 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     }
 
     func webView(_ w: WKWebView, didStartProvisionalNavigation n: WKNavigation!) { failure = nil }
+
+    /// The new document replaces the old one: forget its videos (the new page's frames report afresh).
+    func webView(_ w: WKWebView, didCommit n: WKNavigation!) { detector.reset() }
 
     func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { fail(e) }
     func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { fail(e) }

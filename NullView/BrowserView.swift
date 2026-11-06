@@ -11,6 +11,7 @@ struct WebViewHost: UIViewRepresentable {
 struct BrowserView: View {
     @ObservedObject var model: BrowserModel
     @ObservedObject var blocker: Blocker
+    @ObservedObject var detector: VideoDetector
     @Environment(\.scenePhase) private var scenePhase
     @State private var text = ""
     @FocusState private var editing: Bool
@@ -26,11 +27,12 @@ struct BrowserView: View {
                 WebViewHost(webView: model.webView)
                 if let f = model.failure { errorView(f.message) }
                 else if model.url == nil && !model.isLoading { startView }
+                else if detector.button != .hidden { videoButton }
             }
             if clipboardOffer { clipboardBar }
             toolbar
         }
-        .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker) }
+        .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker, detector: detector) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }
         .onChange(of: scenePhase) { _, p in if p == .active { checkClipboard() } }
@@ -91,6 +93,23 @@ struct BrowserView: View {
         .font(.title3)
         .padding(.horizontal, 24).padding(.vertical, 10)
         .background(.bar)
+    }
+
+    /// Floating button. Phase 4 makes it open video mode; for now it logs the primary video.
+    /// Disabled when nothing is controllable (DRM, no source): the page stays a plain browser.
+    private var videoButton: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Button { detector.buttonTapped() } label: {
+                    Image(systemName: "play.rectangle.fill").font(.title2).padding(14)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .disabled(detector.button != .enabled)
+                .padding(16)
+            }
+        }
     }
 
     private var startView: some View {
