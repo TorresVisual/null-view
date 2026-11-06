@@ -23,6 +23,21 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
         document.addEventListener('visibilitychange', e => e.stopImmediatePropagation(), true);
         """
 
+    /// The desktop layout needs roughly 900 CSS px; Spotify's own viewport tag pins the scale and blocks zoom, so
+    /// replace it (and re-replace when the page rewrites it). Tune W if the layout still overflows or is too small.
+    private static let fitViewport = """
+        (() => {
+          const W = 900, content = `width=${W}, initial-scale=${(screen.width / W).toFixed(3)}, minimum-scale=0.2, maximum-scale=4, user-scalable=yes`;
+          const fix = () => {
+            let ms = document.querySelectorAll('meta[name=viewport]');
+            if (!ms.length && document.head) { const m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); ms = [m]; }
+            ms.forEach(m => { if (m.content !== content) m.content = content; });
+          };
+          fix();
+          new MutationObserver(fix).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['content'] });
+        })();
+        """
+
     /// FRAGILE: private WKPreferences setter, called only if it exists. Returns whether it was applied.
     private static func setPrivateBool(_ selector: String, _ value: Bool, on obj: NSObject) -> Bool {
         let sel = NSSelectorFromString(selector)
@@ -41,7 +56,8 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
         cfg.mediaTypesRequiringUserActionForPlayback = []
-        cfg.defaultWebpagePreferences.preferredContentMode = .desktop
+        // Not .desktop: the log showed it never took effect (platform stayed iPhone); the Mac UA alone is what Spotify reads.
+        cfg.userContentController.addUserScript(WKUserScript(source: Self.fitViewport, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         // Track changes are driven by page timers; a page that thinks it is hidden gets them throttled,
         // which stalls the hop to the next track (locked screen, closed overlay).
         cfg.userContentController.addUserScript(WKUserScript(source: Self.alwaysVisible, injectionTime: .atDocumentStart, forMainFrameOnly: false))
