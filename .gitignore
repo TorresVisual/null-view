@@ -5,3 +5,4 @@ NullView/Info.plist
 build
 SourcePackages
 .null/
+Core/.build/
