@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: BrowserModel
+    @ObservedObject var blocker: Blocker
     @Environment(\.dismiss) private var dismiss
     @AppStorage(BrowserModel.searchTemplateKey) private var template = AddressInput.defaultSearchTemplate
     @State private var confirmClear = false
@@ -11,6 +12,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                BlockingSection(blocker: blocker)
                 Section {
                     TextField("Search URL", text: $template)
                         .keyboardType(.URL)

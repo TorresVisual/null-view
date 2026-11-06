@@ -10,6 +10,7 @@ struct WebViewHost: UIViewRepresentable {
 
 struct BrowserView: View {
     @ObservedObject var model: BrowserModel
+    @ObservedObject var blocker: Blocker
     @Environment(\.scenePhase) private var scenePhase
     @State private var text = ""
     @FocusState private var editing: Bool
@@ -29,11 +30,12 @@ struct BrowserView: View {
             if clipboardOffer { clipboardBar }
             toolbar
         }
-        .sheet(isPresented: $showSettings) { SettingsView(model: model) }
+        .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }
         .onChange(of: scenePhase) { _, p in if p == .active { checkClipboard() } }
         .onAppear { checkClipboard() }
+        .task { await blocker.start() }
     }
 
     // MARK: Pieces
@@ -77,7 +79,14 @@ struct BrowserView: View {
                     .disabled(model.url == nil && model.failure == nil)
             }
             Spacer()
-            Button { showSettings = true } label: { Image(systemName: "gearshape") }
+            Button { model.toggleBlocking() } label: {
+                Image(systemName: blocker.isBlocking(on: model.url) ? "shield.lefthalf.filled" : "shield.slash")
+            }
+            .disabled(model.url == nil)
+            Spacer()
+            Button { showSettings = true } label: {
+                Image(systemName: blocker.hasError ? "exclamationmark.triangle" : "gearshape")
+            }
         }
         .font(.title3)
         .padding(.horizontal, 24).padding(.vertical, 10)

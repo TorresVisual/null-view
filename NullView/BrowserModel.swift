@@ -18,6 +18,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     @Published private(set) var failure: (message: String, url: URL?)?
 
     let webView: WKWebView
+    let blocker: Blocker
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -26,6 +27,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         cfg.mediaTypesRequiringUserActionForPlayback = []
         cfg.allowsPictureInPictureMediaPlayback = true
         webView = WKWebView(frame: .zero, configuration: cfg)
+        blocker = Blocker(userContentController: cfg.userContentController)
         super.init()
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -67,6 +69,13 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     func goForward() { webView.goForward() }
     func stop() { webView.stopLoading() }
 
+    /// Shield button: allowlist (or un-allowlist) this site and reload without blocking.
+    func toggleBlocking() {
+        guard webView.url != nil else { return }
+        blocker.toggleAllow(for: webView.url)
+        webView.reloadFromOrigin()
+    }
+
     func reload() {
         if let f = failure?.url { load(f) } else if webView.url != nil { webView.reload() }
     }
@@ -82,6 +91,9 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// cancelled, and a page cannot navigate the top frame to a `data:` document.
     func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
         guard let scheme = action.request.url?.scheme?.lowercased() else { return .allow }
+        if action.targetFrame?.isMainFrame == true, scheme == "http" || scheme == "https" {
+            blocker.apply(for: action.request.url)
+        }
         switch scheme {
         case "http", "https", "about", "blob": return .allow
         case "data": return action.targetFrame?.isMainFrame == true ? .cancel : .allow
