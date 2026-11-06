@@ -15,6 +15,8 @@ public struct VideoEntry: Equatable, Decodable {
     public let live: Bool
     public let drm: Bool       // MediaKeys attached: out of scope (decisions.md)
     public let src: Bool       // has a source (currentSrc or MSE blob)
+    public let rate: Double?   // playbackRate (optional: older reports lack it)
+    public let pip: Bool?      // in picture-in-picture
 
     /// Big enough to be the thing the user came to watch (filters out trackers and 1x1 probes).
     public static let minArea = 10_000.0
@@ -28,6 +30,8 @@ public struct VideoEntry: Equatable, Decodable {
 public enum VideoMessage: Equatable {
     case videos(frame: String, [VideoEntry])
     case gone(frame: String)
+    /// The page asked for fullscreen on this video (its own fullscreen button): enter video mode.
+    case fullscreen(frame: String, index: Int)
 
     public static let maxVideosPerFrame = 50
 
@@ -35,6 +39,7 @@ public enum VideoMessage: Equatable {
         let type: String
         let frame: String
         let videos: [VideoEntry]?
+        let i: Int?
     }
 
     public static func parse(_ json: String) -> VideoMessage? {
@@ -42,6 +47,9 @@ public enum VideoMessage: Equatable {
               !raw.frame.isEmpty, raw.frame.count <= 64 else { return nil }
         switch raw.type {
         case "gone": return .gone(frame: raw.frame)
+        case "fullscreen":
+            guard let i = raw.i, i >= 0, i < maxVideosPerFrame else { return nil }
+            return .fullscreen(frame: raw.frame, index: i)
         case "videos":
             guard let v = raw.videos, v.count <= maxVideosPerFrame, v.allSatisfy(\.isSane) else { return nil }
             return .videos(frame: raw.frame, v)
@@ -60,6 +68,8 @@ public struct TrackedVideo: Equatable {
     /// Position among all of the page's videos: main frame first, then subframes in the order
     /// they first reported. This is the "video index" of the video identity.
     public let index: Int
+    /// The reporting frame's key, with `entry.i`: where to send commands for this video.
+    public let frame: String
     public let isMainFrame: Bool
     public let entry: VideoEntry
 }
@@ -82,6 +92,7 @@ public struct VideoTracker: Equatable {
             else { frames.append(Frame(key: key, isMain: isMainFrame, videos: videos)) }
         case let .gone(key):
             frames.removeAll { $0.key == key }
+        case .fullscreen: break
         }
     }
 
@@ -91,9 +102,14 @@ public struct VideoTracker: Equatable {
         let ordered = frames.filter(\.isMain) + frames.filter { !$0.isMain }
         var out: [TrackedVideo] = []
         for f in ordered {
-            for e in f.videos { out.append(TrackedVideo(index: out.count, isMainFrame: f.isMain, entry: e)) }
+            for e in f.videos { out.append(TrackedVideo(index: out.count, frame: f.key, isMainFrame: f.isMain, entry: e)) }
         }
         return out
+    }
+
+    /// A specific video by its frame and in-frame index (video mode pins its target this way).
+    public func video(frame: String, i: Int) -> TrackedVideo? {
+        videos.first { $0.frame == frame && $0.entry.i == i }
     }
 
     /// Worth showing the video button for (it may still be uncontrollable, e.g. DRM).

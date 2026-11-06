@@ -102,3 +102,35 @@ final class VideoTests: XCTestCase {
                           VideoID(url: URL(string: "https://e.com/v")!, index: 2))
     }
 }
+
+final class VideoGestureTests: XCTestCase {
+    func testSeekTargetClamps() {
+        XCTAssertEqual(VideoGestures.seekTarget(start: 50, duration: 60, dx: 100, width: 100), 60)   // clamp to end
+        XCTAssertEqual(VideoGestures.seekTarget(start: 5, duration: 90, dx: -100, width: 100), 0)    // clamp to start
+        XCTAssertEqual(VideoGestures.seekTarget(start: 50, duration: 600, dx: 50, width: 100), 150)  // half width = half of 200 s span
+        XCTAssertEqual(VideoGestures.seekTarget(start: 7, duration: 0, dx: 50, width: 100), 7)       // unknown duration: no seek
+    }
+
+    func testLevelAndAxis() {
+        XCTAssertEqual(VideoGestures.level(start: 0.5, dy: -100, height: 200), 1.0)
+        XCTAssertEqual(VideoGestures.level(start: 0.5, dy: 50, height: 200), 0.25)
+        XCTAssertNil(VideoGestures.axis(dx: 3, dy: 4))
+        XCTAssertEqual(VideoGestures.axis(dx: 20, dy: -5), .horizontal)
+        XCTAssertEqual(VideoGestures.axis(dx: 2, dy: -30), .vertical)
+        XCTAssertEqual(VideoGestures.doubleTapDelta(x: 10, width: 100), -10)
+        XCTAssertEqual(VideoGestures.doubleTapDelta(x: 90, width: 100), 10)
+        XCTAssertEqual(VideoGestures.clock(65), "1:05")
+        XCTAssertEqual(VideoGestures.clock(3723), "1:02:03")
+    }
+
+    func testFullscreenMessageAndFrameLookup() {
+        XCTAssertEqual(VideoMessage.parse(#"{"type":"fullscreen","frame":"a","i":2}"#), .fullscreen(frame: "a", index: 2))
+        XCTAssertNil(VideoMessage.parse(#"{"type":"fullscreen","frame":"a"}"#))
+        XCTAssertNil(VideoMessage.parse(#"{"type":"fullscreen","frame":"a","i":-1}"#))
+        var t = VideoTracker()
+        let e = #"{"i":1,"w":640,"h":360,"vis":230400,"playing":false,"ended":false,"muted":false,"loop":false,"dur":9,"pos":0,"live":false,"drm":false,"src":true}"#
+        t.apply(VideoMessage.parse(#"{"type":"videos","frame":"f","videos":[\#(e)]}"#)!, isMainFrame: false)
+        XCTAssertEqual(t.video(frame: "f", i: 1)?.index, 0)
+        XCTAssertNil(t.video(frame: "f", i: 0))
+    }
+}

@@ -7,9 +7,9 @@
   window.__nvVideoDetect = true;
 
   const frame = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  const EVENTS = ['play', 'playing', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'emptied', 'resize'];
+  const EVENTS = ['play', 'playing', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'emptied', 'resize', 'ratechange', 'webkitpresentationmodechanged'];
   const watched = new WeakSet();
-  let timer = 0, due = 0, last = '', everHadVideos = false;
+  let timer = 0, due = 0, last = '', everHadVideos = false, fast = false; // fast: video mode wants 4 position updates/s
 
   const post = (m) => window.webkit?.messageHandlers?.nvVideo?.postMessage(JSON.stringify(m)); // native takes a JSON string
   const num = (x) => (Number.isFinite(x) && x >= 0 ? x : null);
@@ -28,6 +28,8 @@
       live: v.duration === Infinity,
       drm: !!v.mediaKeys,
       src: !!(v.currentSrc || v.src || v.srcObject),
+      rate: v.playbackRate,
+      pip: v.webkitPresentationMode === 'picture-in-picture',
     };
   }
 
@@ -38,7 +40,7 @@
       if (watched.has(v)) return;
       watched.add(v);
       EVENTS.forEach((e) => v.addEventListener(e, () => schedule(100), true));
-      v.addEventListener('timeupdate', () => schedule(1000), true);
+      v.addEventListener('timeupdate', () => schedule(fast ? 250 : 1000), true);
     });
     if (!vids.length && !everHadVideos) return;
     everHadVideos = true;
@@ -65,4 +67,80 @@
   addEventListener('resize', () => schedule(250));
   addEventListener('scroll', () => schedule(500), { passive: true });
   schedule(0);
+
+  // ---- Video mode (Phase 4) ----
+  // Own fullscreen: the video (or the <iframe> holding it) is pinned over the whole viewport, everything
+  // else is hidden. Attributes mark the pinned element and its ancestors; a constructable stylesheet is
+  // used because, unlike a <style> element, a page CSP cannot block it.
+  const CSS = `
+    [data-nv-chain]{transform:none!important;filter:none!important;perspective:none!important;contain:none!important;
+      backdrop-filter:none!important;will-change:auto!important;overflow:visible!important;z-index:auto!important}
+    html[data-nv-on] body *:not([data-nv-chain]):not([data-nv-target]){visibility:hidden!important}
+    [data-nv-target]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;
+      max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;
+      z-index:2147483647!important;background:#000!important;object-fit:contain!important;transform:none!important}
+    html[data-nv-on],html[data-nv-on] body{overflow:hidden!important;background:#000!important}`;
+  let sheet = null;
+
+  function expand(el) {
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) p.setAttribute('data-nv-chain', '');
+    el.setAttribute('data-nv-target', '');
+    document.documentElement.setAttribute('data-nv-on', '');
+    if (!sheet) {
+      sheet = new CSSStyleSheet();
+      sheet.replaceSync(CSS);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    }
+  }
+
+  function collapse() {
+    document.querySelectorAll('[data-nv-chain],[data-nv-target]').forEach((e) => {
+      e.removeAttribute('data-nv-chain');
+      e.removeAttribute('data-nv-target');
+    });
+    document.documentElement.removeAttribute('data-nv-on');
+    if (sheet) document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== sheet);
+    sheet = null;
+  }
+
+  const up = (nv) => { if (parent !== window) parent.postMessage({ nv }, '*'); };
+
+  // A child frame asks its parent to pin the <iframe> that holds it; each level forwards upward.
+  addEventListener('message', (e) => {
+    const nv = e.data?.nv;
+    if (nv !== 'expand' && nv !== 'collapse') return;
+    const f = [...document.querySelectorAll('iframe,frame')].find((x) => x.contentWindow === e.source);
+    if (!f) return;
+    if (nv === 'expand') expand(f); else collapse();
+    up(nv);
+  });
+
+  // Native commands, run with evaluateJavaScript in this content world. Returns false if the video is gone.
+  window.__nvCmd = (i, cmd, arg) => {
+    const v = document.querySelectorAll('video')[i];
+    if (!v) return false;
+    switch (cmd) {
+      case 'enter': fast = true; expand(v); up('expand'); break;
+      case 'exit': fast = false; collapse(); up('collapse'); break;
+      case 'play': v.play().catch(() => {}); break;
+      case 'pause': v.pause(); break;
+      case 'seek': v.currentTime = arg; break;
+      case 'rate': v.playbackRate = arg; break;
+      case 'pip': v.webkitSetPresentationMode?.(v.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture'); break;
+      default: return false;
+    }
+    schedule(0);
+    return true;
+  };
+
+  // The page-world hook (fullscreen-hook.js) fires this when the page asks for fullscreen. Swallow the
+  // request only for a video we can drive; otherwise leave it alone so the page behaves as a plain browser.
+  document.addEventListener('nv-fullscreen', (e) => {
+    const t = e.target;
+    const v = t.tagName === 'VIDEO' ? t : t.querySelector?.('video');
+    const i = v ? [...document.querySelectorAll('video')].indexOf(v) : -1;
+    if (i < 0 || v.mediaKeys || !(v.currentSrc || v.src || v.srcObject)) return;
+    e.preventDefault();
+    post({ type: 'fullscreen', frame, i });
+  }, true);
 })();

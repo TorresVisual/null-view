@@ -20,6 +20,7 @@ before(async () => {
     window.webkit = { messageHandlers: { nvVideo: { postMessage: (m) => window.__nvPost(m) } } };
   });
   await context.addInitScript({ path: SCRIPT });
+  await context.addInitScript({ path: SCRIPT.replace('video-detect', 'fullscreen-hook') });
 });
 after(() => browser?.close());
 beforeEach(async () => { msgs = []; page = await context.newPage(); });
@@ -101,4 +102,70 @@ test('offscreen video has no visible area', async () => {
   await page.evaluate(() => document.querySelector('#a').scrollIntoView());
   await settle(800);
   assert.ok(lastVideos()[0].vis > 0);
+});
+
+const style = (sel, prop) => page.evaluate(([s, p]) => getComputedStyle(document.querySelector(s))[p], [sel, prop]);
+
+test('enter pins the video over the viewport, hides the rest, exit restores', async () => {
+  await load(`<div id=wrap style="transform:translateX(5px);position:relative"><p id=other>other</p>
+              <video id=a width=320 height=180 src="blob:x"></video></div>`);
+  await settle(400);
+  assert.equal(await page.evaluate(() => __nvCmd(0, 'enter')), true);
+  assert.equal(await style('#a', 'position'), 'fixed');
+  assert.equal(await style('#a', 'width'), '800px');
+  assert.equal(await style('#wrap', 'transform'), 'none');       // transformed ancestor would trap position:fixed
+  assert.equal(await style('#other', 'visibility'), 'hidden');
+  await page.evaluate(() => __nvCmd(0, 'exit'));
+  assert.equal(await style('#a', 'position'), 'static');
+  assert.equal(await style('#other', 'visibility'), 'visible');
+  assert.equal(await page.evaluate(() => __nvCmd(5, 'enter')), false);   // no such video
+});
+
+test('a video in an iframe pins its iframe in the parent too', async () => {
+  await load(`<p id=other>other</p><iframe id=f width=400 height=300 srcdoc="<video id=in width=300 height=200 src='blob:z'></video>"></iframe>`);
+  await settle(600);
+  await page.frames()[1].evaluate(() => __nvCmd(0, 'enter'));
+  await settle(200);
+  assert.equal(await style('#f', 'position'), 'fixed');
+  assert.equal(await style('#other', 'visibility'), 'hidden');
+  await page.frames()[1].evaluate(() => __nvCmd(0, 'exit'));
+  await settle(200);
+  assert.equal(await style('#f', 'position'), 'static');
+});
+
+test('commands drive the element; position updates come fast in video mode', async () => {
+  await load('<video id=a width=640 height=360 src="blob:x"></video>');
+  await settle(300);
+  await page.evaluate(() => { const v = document.querySelector('#a'); window.calls = [];
+    v.pause = () => calls.push('pause'); v.play = () => (calls.push('play'), Promise.resolve()); });
+  await page.evaluate(() => { __nvCmd(0, 'play'); __nvCmd(0, 'pause'); __nvCmd(0, 'rate', 2); });
+  assert.deepEqual(await page.evaluate(() => calls), ['play', 'pause']);
+  assert.equal(await page.evaluate(() => document.querySelector('#a').playbackRate), 2);
+  assert.equal(await page.evaluate(() => __nvCmd(0, 'bogus')), false);   // unknown commands do nothing
+  await page.evaluate(() => __nvCmd(0, 'enter'));
+  await fake('#a', { paused: false, readyState: 4, duration: 60, currentTime: 1 }, 'playing');
+  await settle(400);
+  await fake('#a', { currentTime: 2 }, 'timeupdate');
+  await settle(450);                      // < 1000 ms: only fast mode reports this
+  assert.equal(lastVideos()[0].pos, 2);
+});
+
+test('the page asking for fullscreen is swallowed for a drivable video, passed through otherwise', async () => {
+  await load('<video id=a width=640 height=360 src="blob:x"></video><video id=b width=640 height=360></video>');
+  await settle(300);
+  const ask = (sel) => page.evaluate((s) => {
+    const el = document.querySelector(s);
+    window.passed = 0;
+    el.webkitEnterFullscreen = undefined;                       // not under test
+    const f = Element.prototype.requestFullscreen ?? Element.prototype.webkitRequestFullscreen;
+    return f ? (f.call(el), true) : false;
+  }, sel);
+  assert.ok(await ask("#a"), "no fullscreen API in this WebKit build");
+  await settle(200);
+  const fs = msgs.filter((m) => m.type === 'fullscreen');
+  assert.equal(fs.length, 1);
+  assert.equal(fs[0].i, 0);
+  await ask('#b');                                              // no source: left to the page
+  await settle(200);
+  assert.equal(msgs.filter((m) => m.type === 'fullscreen').length, 1);
 });
