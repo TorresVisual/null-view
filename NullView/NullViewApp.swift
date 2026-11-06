@@ -15,7 +15,7 @@ struct NullViewApp: App {
 
     var body: some Scene {
         WindowGroup {
-            BrowserView(model: browser, blocker: browser.blocker, detector: browser.detector, videoMode: browser.videoMode)
+            BrowserView(model: browser, blocker: browser.blocker, detector: browser.detector, videoMode: browser.videoMode, watch: browser.watch)
                 .onOpenURL { if let u = DeepLink.parse($0) { browser.load(u) } }
         }
     }

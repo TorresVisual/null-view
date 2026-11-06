@@ -7,6 +7,9 @@ packages:
   SafariConverterLib:
     url: https://github.com/AdguardTeam/SafariConverterLib
     exactVersion: 4.3.1
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: 7.0.0 # app-only: needs a system SQLite, so it cannot live in Core (builds on the runner only)
   NullViewCore:
     path: Core
 targets:
@@ -23,6 +26,8 @@ targets:
         buildPhase: resources
     dependencies:
       - package: NullViewCore
+      - package: GRDB
+        product: GRDB
       - package: SafariConverterLib
         product: ContentBlockerConverter # also contains the FilterEngine module
     settings:

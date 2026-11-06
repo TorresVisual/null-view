@@ -82,6 +82,10 @@ final class VideoMode: ObservableObject {
 
     // MARK: Commands
 
+    /// The video video mode is pinned to, if any (progress is saved for this one).
+    var pinned: TrackedVideo? { target.flatMap { detector.tracker.video(frame: $0.frame, i: $0.index) } }
+    func play() { send("play") }
+
     var canSeek: Bool { video.map { !$0.live && ($0.dur ?? 0) > 0 } ?? false }
     var position: Double { video?.pos ?? 0 }
     var duration: Double { video?.dur ?? 0 }

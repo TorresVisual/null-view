@@ -67,7 +67,7 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 
 ## Persistence and library
 
-- **SQLite via GRDB**, pure Swift, so it is testable on Windows. No SwiftData or Core Data.
+- **SQLite via GRDB.** No SwiftData or Core Data. **Amended 2026-11-06:** GRDB does not build with the Windows toolchain (no `sqlite3.h`), so only a thin adapter (`NullView/LibraryDB.swift`) uses it and builds on the runner. The models, rules and a `LibraryStore` protocol live in `Core/.../Library.swift` and are tested on Windows against `MemoryLibraryStore`.
 - **Video identity:** canonical page URL (tracking parameters stripped) plus the video's index among the page's videos. Single-page sites change the URL without a reload, so the detector listens for URL changes. Resume sets the position once the video's metadata has loaded.
 - **Continue Watching:** past roughly 15 seconds and not within the last few percent of the duration. Live streams (no duration) are excluded. The thresholds are constants and may be tuned later.
 - **History** auto-deletes after 90 days. **Continue Watching** entries go when the video is marked complete or after 60 days untouched. **Watch Later** is never auto-deleted.

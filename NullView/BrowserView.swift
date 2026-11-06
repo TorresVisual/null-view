@@ -13,10 +13,12 @@ struct BrowserView: View {
     @ObservedObject var blocker: Blocker
     @ObservedObject var detector: VideoDetector
     @ObservedObject var videoMode: VideoMode
+    @ObservedObject var watch: WatchState
     @Environment(\.scenePhase) private var scenePhase
     @State private var text = ""
     @FocusState private var editing: Bool
     @State private var showSettings = false
+    @State private var showLibrary = false
     /// Pasteboard change count we already offered or dismissed.
     @State private var handledPasteboard = UIPasteboard.general.changeCount
     @State private var clipboardOffer = false
@@ -31,17 +33,20 @@ struct BrowserView: View {
                 else if model.url == nil && !model.isLoading { startView }
                 else if detector.button != .hidden { videoButton }
             }
+            if let u = watch.resumeOffer, !videoMode.active { resumeBar(u) }
             if clipboardOffer && !videoMode.active { clipboardBar }
             if !videoMode.active { toolbar }
         }
         .ignoresSafeArea(videoMode.active ? .all : [])
         .statusBarHidden(videoMode.active)
         .persistentSystemOverlays(videoMode.active ? .hidden : .automatic)
+        .sheet(isPresented: $showLibrary) { LibraryView(model: model) }
         .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker, detector: detector) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }
         .onChange(of: scenePhase) { _, p in
             detector.note("app \(p)")
+            if p != .active { watch.flush() }
             if p == .active { checkClipboard() }
         }
         .onAppear { checkClipboard() }
@@ -94,6 +99,8 @@ struct BrowserView: View {
             }
             .disabled(model.url == nil)
             Spacer()
+            Button { showLibrary = true } label: { Image(systemName: "books.vertical") }
+            Spacer()
             Button { showSettings = true } label: {
                 Image(systemName: blocker.hasError ? "exclamationmark.triangle" : "gearshape")
             }
@@ -141,6 +148,18 @@ struct BrowserView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
+    }
+
+    private func resumeBar(_ u: URL) -> some View {
+        HStack {
+            Image(systemName: "play.circle")
+            Text("Resume where you left off").font(.subheadline)
+            Spacer()
+            Button("Resume") { watch.enterVideoWhenReady() }.buttonStyle(.borderedProminent)
+            Button { watch.resumeOffer = nil } label: { Image(systemName: "xmark") }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(.bar)
     }
 
     // MARK: Clipboard (backup path for the nullview:// Shortcut)

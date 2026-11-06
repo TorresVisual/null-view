@@ -138,6 +138,12 @@ public struct VideoID: Hashable, Codable {
         self.index = index
     }
 
+    /// From an already canonical page string (read back from storage).
+    public init(page: String, index: Int) {
+        self.page = page
+        self.index = index
+    }
+
     private static let trackingParams: Set<String> = [
         "fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "_ga", "yclid", "twclid",
     ]

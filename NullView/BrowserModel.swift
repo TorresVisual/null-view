@@ -22,6 +22,8 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     let blocker: Blocker
     let detector: VideoDetector
     let videoMode: VideoMode
+    let watch: WatchState
+    nonisolated static let lastURLKey = "lastURL"
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -38,7 +40,12 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: scripts)
         det.webView = webView
         videoMode = VideoMode(detector: det, webView: webView)
+        let store: LibraryStore = (try? LibraryDB()) ?? MemoryLibraryStore()
+        let ws = WatchState(library: Library(store: store), detector: det, videoMode: videoMode, webView: webView)
+        watch = ws
+        det.onReport = { [weak ws] in ws?.onReport() }
         super.init()
+        ws.onNavigate = { [weak self] in self?.load($0) }
         // Diagnostics for the background-audio bug: why does the system stop playback?
         let nc = NotificationCenter.default
         nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] n in
@@ -65,9 +72,19 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         .receive(on: DispatchQueue.main)
         .sink { [weak self] in MainActor.assumeIsolated { self?.sync() } }
         .store(in: &cancellables)
+
+        // Relaunch: reopen the last page. Nothing is played until the user taps the banner.
+        watch.library.prune()
+        if let s = UserDefaults.standard.string(forKey: Self.lastURLKey), let u = AddressInput.webURL(s) {
+            webView.load(URLRequest(url: u))
+            if watch.library.hasRecord(onPage: u) { watch.resumeOffer = u }
+        }
     }
 
     private func sync() {
+        if let u = webView.url, u != url, AddressInput.webURL(u.absoluteString) != nil {
+            UserDefaults.standard.set(u.absoluteString, forKey: Self.lastURLKey)
+        }
         url = webView.url
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward
@@ -88,6 +105,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// An explicit load (address bar, deep link) ends video mode first: the lock only stops pages from navigating.
     func load(_ url: URL) {
         videoMode.exit()
+        watch.resumeOffer = nil
         webView.load(URLRequest(url: url))
     }
     func goBack() { webView.goBack() }
@@ -134,7 +152,14 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     func webView(_ w: WKWebView, didStartProvisionalNavigation n: WKNavigation!) { failure = nil }
 
     /// The new document replaces the old one: forget its videos (the new page's frames report afresh).
-    func webView(_ w: WKWebView, didCommit n: WKNavigation!) { detector.reset() }
+    func webView(_ w: WKWebView, didCommit n: WKNavigation!) {
+        detector.reset()
+        watch.pageChanged()
+    }
+
+    func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
+        if let u = w.url { watch.library.visit(u, title: w.title ?? "") }
+    }
 
     func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { fail(e) }
     func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { fail(e) }

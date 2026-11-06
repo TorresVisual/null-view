@@ -17,6 +17,8 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
 
     /// Video mode hooks in here: a report arrived / the page asked for fullscreen on a video.
     var onChange: (() -> Void)?
+    /// Watching state hooks in here (every report).
+    var onReport: (() -> Void)?
     var onFullscreen: ((_ frame: String, _ index: Int) -> Void)?
     weak var webView: WKWebView?
 
@@ -71,6 +73,7 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
         tracker.apply(msg, isMainFrame: message.frameInfo.isMainFrame)
         publish()
         onChange?()
+        onReport?()
         logPrimary(nil)
     }
 
