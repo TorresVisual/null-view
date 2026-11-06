@@ -118,9 +118,7 @@ final class Blocker: ObservableObject {
     /// Appends one rule line (from the element picker) to the custom rules and applies it.
     func addElementRule(_ line: String) async -> String? {
         guard !Filters.lines(customRules).contains(line) else { return nil }
-        let sep = customRules.isEmpty || customRules.hasSuffix("
-") ? "" : "
-"
+        let sep = customRules.isEmpty || customRules.hasSuffix("\n") ? "" : "\n"
         return await saveCustomRules(customRules + sep + line)
     }
 
