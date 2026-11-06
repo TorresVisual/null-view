@@ -19,7 +19,18 @@ struct LibraryView: View {
     }
 
     @State private var tab = Tab.continueWatching
-    @State private var items: [Item] = []
+    @State private var all: [Item] = []
+    @State private var search = ""
+    @State private var sort = LibrarySort.newest
+    @State private var site: String?
+    @State private var confirmClear = false
+
+    /// `all` after search, site filter and sort. The queue keeps its own order (it is the play order).
+    private var items: [Item] {
+        LibraryQuery.apply(all, search: search, site: site, sort: tab == .queue ? .newest : sort) { ($0.title, $0.page) }
+    }
+    private var sites: [String] { Set(all.map { LibraryQuery.host($0.page) }).sorted() }
+    private var canClear: Bool { tab == .history || tab == .queue }
 
     private var library: Library { model.watch.library }
 
@@ -42,20 +53,53 @@ struct LibraryView: View {
                     }
                 }
                 Section {
-                    if items.isEmpty { Text("Nothing here yet.").foregroundStyle(.secondary) }
+                    if items.isEmpty {
+                        Text(all.isEmpty ? "Nothing here yet." : "No matches.").foregroundStyle(.secondary)
+                    }
                     ForEach(items) { item in
                         Button { open(item) } label: { row(item) }
                     }
                     .onDelete(perform: delete)
+                    // Reordering is only safe when the list on screen is the whole queue.
+                    .onMove(perform: tab == .queue && search.isEmpty && site == nil ? moveInQueue : nil)
                 } footer: {
-                    if tab == .history { Button("Clear history", role: .destructive) { library.store.clearHistory(); reload() } }
+                    if canClear && !all.isEmpty {
+                        Button(tab == .history ? "Clear history" : "Clear queue", role: .destructive) { confirmClear = true }
+                    }
                 }
             }
             .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .searchable(text: $search, prompt: "Search saved videos")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { filterMenu }
+                if tab == .queue { ToolbarItem(placement: .secondaryAction) { EditButton() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .confirmationDialog(tab == .history ? "Clear all history?" : "Clear the queue?",
+                                isPresented: $confirmClear, titleVisibility: .visible) {
+                Button(tab == .history ? "Clear history" : "Clear queue", role: .destructive) {
+                    if tab == .history { library.store.clearHistory() } else { library.store.setQueue([]) }
+                    reload()
+                }
+            }
             .onAppear(perform: reload)
-            .onChange(of: tab) { _, _ in reload() }
+            .onChange(of: tab) { _, _ in site = nil; reload() }
+        }
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Picker("Sort", selection: $sort) {
+                ForEach(LibrarySort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .disabled(tab == .queue)
+            Picker("Site", selection: $site) {
+                Text("All sites").tag(String?.none)
+                ForEach(sites, id: \.self) { Text($0).tag(String?.some($0)) }
+            }
+        } label: {
+            Image(systemName: sort == .newest && site == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
         }
     }
 
@@ -77,21 +121,21 @@ struct LibraryView: View {
 
     private func reload() {
         let now = Date()
-        func host(_ page: String) -> String { URL(string: page)?.host ?? page }
+        let host = LibraryQuery.host
         func ago(_ d: Date) -> String { d.formatted(.relative(presentation: .named)) }
         switch tab {
         case .continueWatching:
-            items = library.continueWatching(now: now).map {
+            all = library.continueWatching(now: now).map {
                 Item(id: "\($0.id.page)#\($0.id.index)", page: $0.id.page, title: $0.title.isEmpty ? host($0.id.page) : $0.title,
                      poster: $0.poster, detail: "\(host($0.id.page)) · \(VideoGestures.clock($0.position)) of \(VideoGestures.clock($0.duration))",
                      progress: $0.duration > 0 ? $0.position / $0.duration : nil, index: $0.id.index)
             }
         case .later:
-            items = library.store.watchLater().map { saved($0, detail: "saved \(ago($0.date))") }
+            all = library.store.watchLater().map { saved($0, detail: "saved \(ago($0.date))") }
         case .history:
-            items = library.store.history().map { saved($0, detail: "\(host($0.page)) · \(ago($0.date))") }
+            all = library.store.history().map { saved($0, detail: "\(host($0.page)) · \(ago($0.date))") }
         case .queue:
-            items = library.store.queue().map {
+            all = library.store.queue().map {
                 Item(id: $0, page: $0, title: host($0), poster: nil, detail: $0, progress: nil)
             }
         }
@@ -122,6 +166,13 @@ struct LibraryView: View {
             case .queue: library.removeFromQueue(page: p)
             }
         }
+        reload()
+    }
+
+    private func moveInQueue(_ from: IndexSet, _ to: Int) {
+        var q = library.store.queue()
+        q.move(fromOffsets: from, toOffset: to)
+        library.store.setQueue(q)
         reload()
     }
 }

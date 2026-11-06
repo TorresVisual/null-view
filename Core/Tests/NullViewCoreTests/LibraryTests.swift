@@ -86,4 +86,19 @@ final class LibraryTests: XCTestCase {
         lib.removeFromQueue(page: "https://b.example/2")
         XCTAssertNil(lib.popNext())
     }
+
+    func testQuerySearchSiteAndSort() {
+        let items = [("Zebra clip", "https://b.com/z"), ("apple pie", "https://a.com/p"), ("Éclair", "https://b.com/e")]
+        func run(_ search: String = "", site: String? = nil, sort: LibrarySort = .newest) -> [String] {
+            LibraryQuery.apply(items, search: search, site: site, sort: sort) { (title: $0.0, page: $0.1) }.map { $0.0 }
+        }
+        XCTAssertEqual(run(), ["Zebra clip", "apple pie", "Éclair"])
+        XCTAssertEqual(run(sort: .oldest), ["Éclair", "apple pie", "Zebra clip"])
+        XCTAssertEqual(run(sort: .title), ["apple pie", "Éclair", "Zebra clip"])
+        XCTAssertEqual(run(sort: .site), ["apple pie", "Éclair", "Zebra clip"])
+        XCTAssertEqual(run("eclair"), ["Éclair"])
+        XCTAssertEqual(run("B.COM clip"), ["Zebra clip"])
+        XCTAssertEqual(run(site: "b.com"), ["Zebra clip", "Éclair"])
+        XCTAssertEqual(run("apple", site: "b.com"), [])
+    }
 }

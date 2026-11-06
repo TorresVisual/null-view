@@ -162,6 +162,39 @@ public final class Library {
     private static func cutoff(days: Int, from now: Date) -> Date { now.addingTimeInterval(-Double(days) * 86_400) }
 }
 
+/// Sorting, site filter and search for the Library lists. Items come in newest first.
+public enum LibrarySort: String, CaseIterable {
+    case newest = "Newest", oldest = "Oldest", title = "Title", site = "Site"
+}
+
+public enum LibraryQuery {
+    public static func host(_ page: String) -> String { URL(string: page)?.host ?? page }
+
+    /// `search` matches title or address, case and diacritics ignored, all words must hit.
+    /// `site` keeps only that host. `sort` reorders; `.newest` keeps the given order.
+    public static func apply<T>(_ items: [T], search: String = "", site: String? = nil, sort: LibrarySort = .newest,
+                                key: (T) -> (title: String, page: String)) -> [T] {
+        let words = search.split(whereSeparator: \.isWhitespace).map(String.init)
+        var out = items.filter { item in
+            let k = key(item)
+            if let site, host(k.page) != site { return false }
+            let hay = k.title + " " + k.page
+            return words.allSatisfy { hay.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        }
+        switch sort {
+        case .newest: break
+        case .oldest: out.reverse()
+        case .title: out.sort { key($0).title.localizedCaseInsensitiveCompare(key($1).title) == .orderedAscending }
+        case .site:
+            out.sort {
+                let (a, b) = (host(key($0).page), host(key($1).page))
+                return a == b ? key($0).title.localizedCaseInsensitiveCompare(key($1).title) == .orderedAscending : a < b
+            }
+        }
+        return out
+    }
+}
+
 /// In-memory store for tests.
 public final class MemoryLibraryStore: LibraryStore {
     private var recs: [VideoID: WatchRecord] = [:]
