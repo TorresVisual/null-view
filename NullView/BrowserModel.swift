@@ -29,6 +29,17 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// mobile page sends you to the app. So spotify.com gets a desktop UA. Content mode alone was ignored on
     /// some loads (the log showed an iPhone UA), so the UA is also pinned, per navigation.
     private static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
+    /// The customUserAgent route kept giving Spotify an iPhone UA after a cross-site switch, so also tell
+    /// the page itself. Page world on purpose (it patches page APIs, like the AdGuard bundle); no message handler.
+    private static let desktopSpoof = WKUserScript(source: """
+        if (/(^|\\.)spotify\\.com$/.test(location.hostname)) {
+          const UA = '\(desktopUA)';
+          const d = (k, v) => Object.defineProperty(Navigator.prototype, k, { get: () => v, configurable: true });
+          d('userAgent', UA); d('appVersion', UA.slice(8)); d('platform', 'MacIntel');
+          d('maxTouchPoints', 0); d('vendor', 'Apple Computer, Inc.');
+        }
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+
     /// Must run before a load starts: a UA set inside decidePolicyFor only reached the next navigation
     /// (the log showed iPhone UAs on every Spotify load that followed another site).
     private func applyUA(for url: URL?) {
@@ -46,7 +57,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         let det = VideoDetector()
         det.attach(to: cfg.userContentController, scriptLoaded: videoScript != nil)
         detector = det
-        let scripts = [videoScript, VideoDetector.makeFullscreenHook()].compactMap { $0 }
+        let scripts = [videoScript, VideoDetector.makeFullscreenHook(), Self.desktopSpoof].compactMap { $0 }
         blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: scripts)
         det.webView = webView
         videoMode = VideoMode(detector: det, webView: webView)
