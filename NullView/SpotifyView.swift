@@ -23,11 +23,13 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
         document.addEventListener('visibilitychange', e => e.stopImmediatePropagation(), true);
         """
 
-    /// The desktop layout needs roughly 900 CSS px; Spotify's own viewport tag pins the scale and blocks zoom, so
-    /// replace it (and re-replace when the page rewrites it). Tune W if the layout still overflows or is too small.
+    /// Spotify's own viewport tag pins the scale and blocks zoom, so replace it (and re-replace when the page
+    /// rewrites it). W = layout width in CSS px, also the fully zoomed-out view: 1950 matches what the owner
+    /// picked on the phone (zoomed out to scale 0.2, full desktop layout with the right panel). Raise W to
+    /// start smaller, lower it to start bigger (the page then drops the right panel).
     private static let fitViewport = """
         (() => {
-          const W = 900, s = (screen.width / W).toFixed(3), content = `width=${W}, initial-scale=${s}, minimum-scale=${s}, maximum-scale=4, user-scalable=yes`;
+          const W = 1950, s = (screen.width / W).toFixed(3), content = `width=${W}, initial-scale=${s}, minimum-scale=${s}, maximum-scale=4, user-scalable=yes`;
           const fix = () => {
             let ms = document.querySelectorAll('meta[name=viewport]');
             if (!ms.length && document.head) { const m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); ms = [m]; }
