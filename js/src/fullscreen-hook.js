@@ -17,6 +17,15 @@
   ['requestFullscreen', 'webkitRequestFullscreen'].forEach((n) => wrap(Element.prototype, n));
   ['webkitEnterFullscreen', 'webkitEnterFullScreen'].forEach((n) => wrap(HTMLVideoElement.prototype, n));
 
+  // Diagnostic: stamp the document whenever the PAGE calls pause(), so the isolated script can tell
+  // "the page paused it" from "iOS paused it". Our own pause command runs in the isolated world and
+  // does not pass through this patch.
+  const pause = HTMLMediaElement.prototype.pause;
+  HTMLMediaElement.prototype.pause = function (...args) {
+    document.documentElement.setAttribute('data-nv-pj', String(Date.now()));
+    return pause.apply(this, args);
+  };
+
   // Background playback: YouTube and others pause on `visibilitychange` when the app is backgrounded or the
   // screen locks (log 2026-11-06: paused in the same second as "app background"). Present the page as always
   // visible and swallow those events before any page listener sees them.

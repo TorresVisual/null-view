@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import NullViewCore
 import UIKit
@@ -38,6 +39,16 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         det.webView = webView
         videoMode = VideoMode(detector: det, webView: webView)
         super.init()
+        // Diagnostics for the background-audio bug: why does the system stop playback?
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] n in
+            let t = n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt ?? 99
+            MainActor.assumeIsolated { self?.detector.note("audio interruption type=\(t)") }
+        }
+        nc.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] n in
+            let r = n.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 99
+            MainActor.assumeIsolated { self?.detector.note("audio route change reason=\(r)") }
+        }
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true

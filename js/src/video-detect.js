@@ -30,6 +30,7 @@
       src: !!(v.currentSrc || v.src || v.srcObject),
       rate: v.playbackRate,
       pip: v.webkitPresentationMode === 'picture-in-picture',
+      pj: Date.now() - Number(document.documentElement.getAttribute('data-nv-pj') || 0) < 1500, // page called pause() just now
     };
   }
 

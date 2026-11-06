@@ -99,14 +99,14 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
         let e = p.entry
         let id = pageURL.map { VideoID(url: $0, index: p.index) }
         // One line per change, plus a position update every 5 s while playing.
-        let key = "\(id?.page ?? "?")|\(p.index)|\(e.dur ?? -1)|\(e.playing)|\(tracker.videos.count)"
+        let key = "\(id?.page ?? "?")|\(p.index)|\(e.dur ?? -1)|\(e.playing)|\(e.pj ?? false)|\(tracker.videos.count)"
         guard force || why != nil || key != lastLogKey || Date().timeIntervalSince(lastLogTime) >= 5 else { return }
         lastLogKey = key
         lastLogTime = Date()
         let dur = e.live ? "live" : e.dur.map { String(format: "%.1f", $0) } ?? "?"
         note("\(why.map { $0 + ": " } ?? "")video #\(p.index) of \(tracker.videos.count) "
              + "\(p.isMainFrame ? "main" : "iframe") \(Int(e.w))x\(Int(e.h)) "
-             + "\(e.playing ? "playing" : "paused") pos=\(String(format: "%.1f", e.pos)) dur=\(dur)\n    \(id?.page ?? "?")")
+             + "\(e.playing ? "playing" : e.pj == true ? "paused-by-page" : "paused") pos=\(String(format: "%.1f", e.pos)) dur=\(dur)\n    \(id?.page ?? "?")")
     }
 
     func note(_ s: String) {

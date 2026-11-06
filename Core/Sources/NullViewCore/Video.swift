@@ -17,6 +17,7 @@ public struct VideoEntry: Equatable, Decodable {
     public let src: Bool       // has a source (currentSrc or MSE blob)
     public let rate: Double?   // playbackRate (optional: older reports lack it)
     public let pip: Bool?      // in picture-in-picture
+    public let pj: Bool?       // the page itself called pause() in the last 1.5 s (diagnostic)
 
     /// Big enough to be the thing the user came to watch (filters out trackers and 1x1 probes).
     public static let minArea = 10_000.0

@@ -23,6 +23,7 @@ final class VideoMode: ObservableObject {
     private var hideTask: Task<Void, Never>?
     private var hudTask: Task<Void, Never>?
     let volume = SystemVolume()
+    private var remote: [(MPRemoteCommand, Any)] = []
 
     init(detector: VideoDetector, webView: WKWebView) {
         self.detector = detector
@@ -48,6 +49,7 @@ final class VideoMode: ObservableObject {
         webView.allowsBackForwardNavigationGestures = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         send("enter")
+        registerRemote()
         rotate(.landscape)
         poke()
         detector.note("video mode on: video \(index) in \(frame.prefix(4)), \(v.isMainFrame ? "main" : "iframe")")
@@ -58,6 +60,7 @@ final class VideoMode: ObservableObject {
         guard active else { return }
         if rateBeforeBoost != nil { setRate(rateBeforeBoost ?? 1); rateBeforeBoost = nil }
         send("exit")
+        unregisterRemote()
         active = false
         video = nil
         hideTask?.cancel()
@@ -92,6 +95,25 @@ final class VideoMode: ObservableObject {
     func boost(_ on: Bool) {
         if on, rateBeforeBoost == nil { rateBeforeBoost = video?.rate ?? 1; setRate(2); flash("2×") }
         else if !on, let r = rateBeforeBoost { setRate(r); rateBeforeBoost = nil }
+    }
+
+    /// Lock-screen / Control Center play and pause. The page (YouTube) pauses itself when the screen locks;
+    /// in video mode WebKit's own play button did not bring it back, so these resume it through our command.
+    private func registerRemote() {
+        let c = MPRemoteCommandCenter.shared()
+        for (cmd, name) in [(c.playCommand, "play"), (c.pauseCommand, "pause")] {
+            cmd.isEnabled = true
+            let token = cmd.addTarget { [weak self] _ in
+                Task { @MainActor in self?.detector.note("remote \(name)"); self?.send(name) }
+                return .success
+            }
+            remote.append((cmd, token))
+        }
+    }
+
+    private func unregisterRemote() {
+        remote.forEach { $0.0.removeTarget($0.1) }
+        remote = []
     }
 
     private func send(_ cmd: String, _ arg: Double = 0) {
