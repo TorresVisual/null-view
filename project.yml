@@ -35,7 +35,7 @@ targets:
     info:
       path: NullView/Info.plist
       properties:
-        CFBundleDisplayName: NullView
+        CFBundleDisplayName: Null View
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations:
