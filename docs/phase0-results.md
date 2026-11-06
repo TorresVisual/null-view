@@ -13,4 +13,10 @@ Device: iPhone, iOS 26.6.2, sideloaded via AltStore. App built by the `build-ios
 | 4 Background audio | Not run | Needs a working video. |
 | 5 URL scheme | **Pass** | A Shortcut ("Open URLs" with `nullview://open?url=…`) opened the sideloaded app on a free Apple ID. No extra app ID needed. |
 
-Takeaway: the risky part (real lists compile within the rule cap, scriptlets inject through a user script) works. The remaining gates are about video and the URL scheme.
+## Run 2 (2026-11-06)
+
+All remaining checks passed: cosmetic CSS injection (`cosmetic_body_bg` red), PiP on a custom-controlled `<video>`, and audio continuing after screen lock and app switch.
+
+## Verdict: **Phase 0 passed, all five gates.** The stack in `decisions.md` is confirmed. Phase 1 may start.
+
+Takeaway (run 1): the risky part (real lists compile within the rule cap, scriptlets inject through a user script) works. The remaining gates are about video and the URL scheme.

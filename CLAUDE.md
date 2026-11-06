@@ -2,7 +2,7 @@
 
 iOS-only personal video browser (Swift, WKWebView). No Mac available: all iOS builds happen on a GitHub Actions macOS runner.
 
-**Read `docs/decisions.md` first.** It is the source of truth and overrides `docs/brief.md` (the original intent and phase outline). Current step: Phase 0 feasibility gate. Don't build the full app before it passes.
+**Read `docs/decisions.md` first.** It is the source of truth and overrides `docs/brief.md` (the original intent and phase outline). Phase 0 (feasibility gate) passed, see `docs/phase0-results.md`. Current step: Phase 1 (browser foundation). `NullView/Spike*.swift` is throwaway spike code.
 
 ## CI cost rule (macOS runner)
 
