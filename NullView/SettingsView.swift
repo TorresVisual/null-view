@@ -28,6 +28,12 @@ struct SettingsView: View {
                     Text("Text that is not a web address opens this URL, with %s replaced by what you typed.")
                 }
                 Section {
+                    Text("nullview://open?url=")
+                        .font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
+                } header: { Text("Sharing") } footer: {
+                    Text("In the Shortcuts app, make a shortcut that accepts URLs from the share sheet and runs Open URLs on nullview://open?url= followed by the shared link. Copying a link also works: Null View offers to open it.")
+                }
+                Section {
                     Text(detector.logText.isEmpty ? "Nothing detected yet." : detector.logText)
                         .font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
                     Button("Copy log") { UIPasteboard.general.string = detector.log.joined(separator: "\n") }

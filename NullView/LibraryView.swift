@@ -100,6 +100,8 @@ struct LibraryView: View {
             }
         } label: {
             Image(systemName: sort == .newest && site == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Sort and filter")
         }
     }
 
@@ -108,13 +110,13 @@ struct LibraryView: View {
             AsyncImage(url: item.poster.flatMap(URL.init(string:))) { img in
                 img.resizable().scaledToFill()
             } placeholder: {
-                Color.secondary.opacity(0.2).overlay(Image(systemName: "play.rectangle").foregroundStyle(.secondary))
+                Color.secondary.opacity(0.2).overlay(Image(systemName: "play.rectangle").foregroundStyle(.secondary).accessibilityHidden(true))
             }
             .frame(width: 80, height: 45).clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).lineLimit(2).foregroundStyle(.primary)
                 Text(item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                if let p = item.progress { ProgressView(value: p).padding(.top, 2) }
+                if let p = item.progress { ProgressView(value: p).padding(.top, 2).accessibilityLabel("Watched").accessibilityValue("\(Int(p * 100)) percent") }
             }
         }
     }

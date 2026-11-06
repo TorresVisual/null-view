@@ -202,9 +202,9 @@ struct VideoModeView: View {
     private var controls: some View {
         VStack {
             HStack {
-                circleButton("chevron.backward") { mode.exit() }
+                circleButton("chevron.backward", "Exit video mode") { mode.exit() }
                 Spacer()
-                circleButton(mode.video?.pip == true ? "pip.exit" : "pip.enter") { mode.togglePiP() }
+                circleButton(mode.video?.pip == true ? "pip.exit" : "pip.enter", "Picture in picture") { mode.togglePiP() }
             }
             Spacer()
             Button { mode.togglePlay() } label: {
@@ -212,6 +212,7 @@ struct VideoModeView: View {
                     .font(.system(size: 34)).frame(width: 76, height: 76)
                     .background(.ultraThinMaterial, in: Circle())
             }
+            .accessibilityLabel(mode.video?.playing == true ? "Pause" : "Play")
             Spacer()
             scrubber
         }
@@ -235,11 +236,12 @@ struct VideoModeView: View {
         }
     }
 
-    private func circleButton(_ symbol: String, _ action: @escaping () -> Void) -> some View {
+    private func circleButton(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.title3).frame(width: 44, height: 44)
                 .background(.ultraThinMaterial, in: Circle())
         }
+        .accessibilityLabel(label)
     }
 }
 

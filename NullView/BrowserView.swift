@@ -33,10 +33,12 @@ struct BrowserView: View {
                 else if model.url == nil && !model.isLoading { startView }
                 else if detector.button != .hidden { videoButton }
             }
-            if let u = watch.resumeOffer, !videoMode.active { resumeBar(u) }
-            if clipboardOffer && !videoMode.active { clipboardBar }
+            if let u = watch.resumeOffer, !videoMode.active { resumeBar(u).transition(bar) }
+            if clipboardOffer && !videoMode.active { clipboardBar.transition(bar) }
             if !videoMode.active { toolbar }
         }
+        .animation(.easeInOut(duration: 0.2), value: clipboardOffer)
+        .animation(.easeInOut(duration: 0.2), value: watch.resumeOffer)
         .ignoresSafeArea(videoMode.active ? .all : [])
         .statusBarHidden(videoMode.active)
         .persistentSystemOverlays(videoMode.active ? .hidden : .automatic)
@@ -53,6 +55,14 @@ struct BrowserView: View {
         .task { await blocker.start() }
     }
 
+    private let bar = AnyTransition.opacity.combined(with: .move(edge: .bottom))
+
+    /// Icon-only toolbar button: 44 pt hit area (Apple's minimum) and a VoiceOver name.
+    private func tool(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).frame(minWidth: 44, minHeight: 44) }
+            .accessibilityLabel(label)
+    }
+
     // MARK: Pieces
 
     private var addressBar: some View {
@@ -66,11 +76,12 @@ struct BrowserView: View {
                     .submitLabel(.go)
                     .onSubmit { model.go(text); editing = false }
                 if editing && !text.isEmpty {
-                    Button { text = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    Button { text = "" } label: { Image(systemName: "xmark.circle.fill").frame(minWidth: 44, minHeight: 44) }
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel("Clear address")
                 }
             }
-            .padding(10)
+            .padding(.horizontal, 10).padding(.vertical, 2)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal, 12).padding(.vertical, 8)
             ProgressView(value: model.progress)
@@ -81,32 +92,30 @@ struct BrowserView: View {
 
     private var toolbar: some View {
         HStack {
-            Button { model.goBack() } label: { Image(systemName: "chevron.backward") }
-                .disabled(!model.canGoBack)
+            tool("chevron.backward", "Back") { model.goBack() }.disabled(!model.canGoBack)
             Spacer()
-            Button { model.goForward() } label: { Image(systemName: "chevron.forward") }
-                .disabled(!model.canGoForward)
+            tool("chevron.forward", "Forward") { model.goForward() }.disabled(!model.canGoForward)
             Spacer()
             if model.isLoading {
-                Button { model.stop() } label: { Image(systemName: "xmark") }
+                tool("xmark", "Stop loading") { model.stop() }
             } else {
-                Button { model.reload() } label: { Image(systemName: "arrow.clockwise") }
+                tool("arrow.clockwise", "Reload") { model.reload() }
                     .disabled(model.url == nil && model.failure == nil)
             }
             Spacer()
-            Button { model.toggleBlocking() } label: {
-                Image(systemName: blocker.isBlocking(on: model.url) ? "shield.lefthalf.filled" : "shield.slash")
+            tool(blocker.isBlocking(on: model.url) ? "shield.lefthalf.filled" : "shield.slash",
+                 blocker.isBlocking(on: model.url) ? "Blocking on, turn off for this site" : "Blocking off, turn on for this site") {
+                model.toggleBlocking()
             }
             .disabled(model.url == nil)
             Spacer()
-            Button { showLibrary = true } label: { Image(systemName: "books.vertical") }
+            tool("books.vertical", "Library") { showLibrary = true }
             Spacer()
-            Button { showSettings = true } label: {
-                Image(systemName: blocker.hasError ? "exclamationmark.triangle" : "gearshape")
-            }
+            tool(blocker.hasError ? "exclamationmark.triangle" : "gearshape",
+                 blocker.hasError ? "Settings, filter update failed" : "Settings") { showSettings = true }
         }
         .font(.title3)
-        .padding(.horizontal, 24).padding(.vertical, 10)
+        .padding(.horizontal, 16)
         .background(.bar)
     }
 
@@ -122,6 +131,7 @@ struct BrowserView: View {
                         .background(.regularMaterial, in: Circle())
                 }
                 .disabled(detector.button != .enabled)
+                .accessibilityLabel("Open video mode")
                 .padding(16)
             }
         }
@@ -131,6 +141,8 @@ struct BrowserView: View {
         VStack(spacing: 8) {
             Image(systemName: "globe").font(.system(size: 44))
             Text("Enter an address or search").font(.headline)
+            Text("To open links from other apps, set up the Shortcut described in Settings under Sharing.")
+                .font(.footnote).multilineTextAlignment(.center).padding(.horizontal, 32).padding(.top, 8)
         }
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -156,7 +168,8 @@ struct BrowserView: View {
             Text("Resume where you left off").font(.subheadline)
             Spacer()
             Button("Resume") { watch.enterVideoWhenReady() }.buttonStyle(.borderedProminent)
-            Button { watch.resumeOffer = nil } label: { Image(systemName: "xmark") }
+            Button { watch.resumeOffer = nil } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
+                .accessibilityLabel("Dismiss")
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
         .background(.bar)
@@ -170,7 +183,8 @@ struct BrowserView: View {
             Text("Link on clipboard").font(.subheadline)
             Spacer()
             Button("Open") { openClipboard() }.buttonStyle(.borderedProminent)
-            Button { dismissClipboard() } label: { Image(systemName: "xmark") }
+            Button { dismissClipboard() } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
+                .accessibilityLabel("Dismiss")
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
         .background(.bar)
