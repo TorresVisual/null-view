@@ -143,6 +143,9 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
             return .cancel
         }
         guard let scheme = action.request.url?.scheme?.lowercased() else { return .allow }
+        if action.targetFrame?.isMainFrame ?? true {
+            detector.note("nav type=\(action.navigationType.rawValue) \(action.request.url?.absoluteString.prefix(100) ?? "?")")
+        }
         if action.targetFrame?.isMainFrame == true, scheme == "http" || scheme == "https" {
             blocker.apply(for: action.request.url)
             // iOS hands tapped links to the domain's installed app (Universal Links, e.g. x.com).
@@ -163,8 +166,13 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     func webView(_ w: WKWebView, didStartProvisionalNavigation n: WKNavigation!) { failure = nil }
 
+    func webView(_ w: WKWebView, didReceiveServerRedirectForProvisionalNavigation n: WKNavigation!) {
+        detector.note("redirect -> \(w.url?.absoluteString.prefix(100) ?? "?")")
+    }
+
     /// The new document replaces the old one: forget its videos (the new page's frames report afresh).
     func webView(_ w: WKWebView, didCommit n: WKNavigation!) {
+        detector.note("commit \(w.url?.absoluteString.prefix(100) ?? "?")")
         detector.reset()
         watch.pageChanged()
     }
@@ -178,6 +186,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     private func fail(_ e: Error) {
         let ns = e as NSError
+        detector.note("fail \(ns.domain) \(ns.code) \(ns.userInfo[NSURLErrorFailingURLErrorKey] ?? "")")
         // Cancelled loads (a new navigation started, or the user hit stop) are not errors.
         if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled { return }
         // "Frame load interrupted": a download or a policy-cancelled navigation, nothing to show.
