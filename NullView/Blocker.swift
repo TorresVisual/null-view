@@ -23,12 +23,17 @@ final class Blocker: ObservableObject {
     static let customID = "custom"
     private static let allowKey = "blockerAllowlist"
     private static let customKey = "blockerCustomRules"
+    private static let filtersKey = "blockerFilters"
+    /// A failing list (dead custom URL) would otherwise be retried on every return to the app.
+    private static let retryAfter: TimeInterval = 600
 
     @Published private(set) var meta: [String: ListMeta] = [:]
     /// Last error per list id (in memory only; the previous good list stays active).
     @Published private(set) var errors: [String: String] = [:]
     @Published private(set) var isUpdating = false
     @Published private(set) var allowlist: AllowList
+    /// Which lists are on, plus the ones added by URL.
+    @Published private(set) var config: FilterConfig
 
     private(set) var customRules: String
     private let ucc: WKUserContentController
@@ -36,6 +41,7 @@ final class Blocker: ObservableObject {
     private var engine: WebExtension?
     private var attached = false
     private var currentURL: URL?
+    private var lastUpdateAttempt = Date.distantPast
     private let dir: URL
     private let bundleJS: String
     /// Other user scripts (video detection). `removeAllUserScripts()` has no per-script variant,
@@ -43,7 +49,7 @@ final class Blocker: ObservableObject {
     private let persistentScripts: [WKUserScript]
 
     var hasError: Bool { !errors.isEmpty }
-    private var ids: [String] { Filters.defaults.map(\.id) + [Self.customID] }
+    private var ids: [String] { config.active.map(\.id) + [Self.customID] }
 
     init(userContentController: WKUserContentController, persistentScripts: [WKUserScript] = []) {
         ucc = userContentController
@@ -57,6 +63,7 @@ final class Blocker: ObservableObject {
         let d = UserDefaults.standard
         allowlist = d.data(forKey: Self.allowKey).flatMap { try? JSONDecoder().decode(AllowList.self, from: $0) } ?? AllowList()
         customRules = d.string(forKey: Self.customKey) ?? ""
+        config = d.data(forKey: Self.filtersKey).flatMap { try? JSONDecoder().decode(FilterConfig.self, from: $0) } ?? FilterConfig()
         meta = (try? JSONDecoder().decode([String: ListMeta].self, from: Data(contentsOf: dir.appendingPathComponent("meta.json")))) ?? [:]
         if bundleJS.isEmpty { errors["engine"] = "adblock-content.js missing from the app bundle" }
     }
@@ -70,16 +77,24 @@ final class Blocker: ObservableObject {
         }
         await rebuildEngine()
         refreshAttachment()
-        if Filters.defaults.contains(where: { Filters.isStale(meta[$0.id]?.updated) }) { await update() }
+        await refreshIfStale()
+    }
+
+    /// Launch and every return to the front: iOS keeps the app alive for days, so launch alone is not enough.
+    func refreshIfStale() async {
+        guard Date().timeIntervalSince(lastUpdateAttempt) > Self.retryAfter,
+              config.active.contains(where: { Filters.isStale(meta[$0.id]?.updated) }) else { return }
+        await update()
     }
 
     /// Downloads, converts and compiles every list. Failures are recorded per list.
     func update() async {
         guard !isUpdating else { return }
         isUpdating = true
+        lastUpdateAttempt = Date()
         defer { isUpdating = false }
         await withTaskGroup(of: (String, String?).self) { group in
-            for l in Filters.defaults {
+            for l in config.active {
                 group.addTask { (l.id, await self.download(l)) }
             }
             for await (id, err) in group { errors[id] = err }
@@ -98,6 +113,73 @@ final class Blocker: ObservableObject {
         await rebuildEngine()
         refreshAttachment()
         return err
+    }
+
+    /// Appends one rule line (from the element picker) to the custom rules and applies it.
+    func addElementRule(_ line: String) async -> String? {
+        guard !Filters.lines(customRules).contains(line) else { return nil }
+        let sep = customRules.isEmpty || customRules.hasSuffix("
+") ? "" : "
+"
+        return await saveCustomRules(customRules + sep + line)
+    }
+
+    // MARK: Lists
+
+    /// Turns a list on (downloads it now) or off (forgets its compiled rules).
+    func setEnabled(_ id: String, _ on: Bool) async {
+        guard !isUpdating, let l = config.all.first(where: { $0.id == id }) else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        config.setEnabled(id, on)
+        saveConfig()
+        if on { errors[id] = await download(l) } else { await drop(id) }
+        await rebuildEngine()
+        refreshAttachment()
+    }
+
+    /// Adds a list by URL. A list that does not download and compile is not kept. Returns an error message or nil.
+    func addList(name: String, url: String) async -> String? {
+        guard !isUpdating else { return "Wait for the running update to finish" }
+        isUpdating = true
+        defer { isUpdating = false }
+        var next = config
+        guard let l = next.addCustom(name: name, urlText: url) else { return "Enter a new address starting with https://" }
+        if let err = await download(l) {
+            await drop(l.id)
+            return err
+        }
+        config = next
+        saveConfig()
+        await rebuildEngine()
+        refreshAttachment()
+        return nil
+    }
+
+    func removeList(_ id: String) async {
+        guard config.isCustom(id) else { return }
+        config.removeCustom(id)
+        saveConfig()
+        await drop(id)
+        await rebuildEngine()
+        refreshAttachment()
+    }
+
+    private func drop(_ id: String) async {
+        compiled[id] = nil
+        await Self.remove(id)
+        meta[id] = nil
+        errors[id] = nil
+        try? FileManager.default.removeItem(at: advancedURL(id))
+        persistMeta()
+    }
+
+    private func saveConfig() {
+        UserDefaults.standard.set(try? JSONEncoder().encode(config), forKey: Self.filtersKey)
+    }
+
+    private func persistMeta() {
+        try? JSONEncoder().encode(meta).write(to: dir.appendingPathComponent("meta.json"), options: .atomic)
     }
 
     // MARK: Per-page attachment
@@ -181,7 +263,7 @@ final class Blocker: ObservableObject {
         try Data((r.advancedRulesText ?? "").utf8).write(to: advancedURL(id), options: .atomic)
         meta[id] = ListMeta(updated: Date(), safariRules: r.safariRulesCount, sourceRules: r.sourceRulesCount,
                             invalidRules: r.errorsCount, discardedRules: r.discardedSafariRules)
-        try? JSONEncoder().encode(meta).write(to: dir.appendingPathComponent("meta.json"), options: .atomic)
+        persistMeta()
     }
 
     // The store's lookUp/remove have no async overload in the SDK, so wrap the completion handlers.

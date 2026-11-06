@@ -33,10 +33,13 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 - Engine: **AdGuard's Swift converter (SafariConverterLib)** turns list text into Safari content-rule JSON, compiled to `WKContentRuleList` on the device. Cosmetic filters and scriptlets (AdGuard Scriptlets) are injected as user scripts. **No home-grown engine.**
 - Why on the device: the brief requires in-app list auto-update.
 - Default lists: EasyList, EasyPrivacy, AdGuard Mobile Ads. Respect the rule-count cap per list by splitting into several lists.
-- Update: on app launch if the lists are more than 24 hours old, plus a manual "Update now" button. No background refresh.
+- **List choice (2026-11-06):** Settings has a toggle per list. AdGuard Cookie Notices and AdGuard Popups are built in but **off by default** (breakage risk; the owner turns them on). Lists can be added by **https URL** (never plain http: a swapped list injects rules into every page); a list that does not download and compile is not kept. Rules in `FilterConfig` (`Core/.../Blocking.swift`).
+- Update: when the lists are more than 24 hours old, at app launch **and whenever the app returns to the front** (iOS keeps the app alive for days, so launch alone left lists stale), plus a manual "Update now" button. A failed attempt is not retried for 10 minutes. No background refresh.
 - On download or compile failure: keep the last good compiled lists and show an error. Never end up with no blocking.
 - Custom rules: free-text lines in ABP/AdGuard syntax, compiled into their own list.
-- Allowlist and per-site disable: remove the rule lists and scripts for that host, then reload the page.
+- Allowlist and per-site disable: remove the rule lists and scripts for that host, then reload the page. It also turns off popup blocking for that host.
+- **Popups (2026-11-06):** a window the page opens by script (`window.open`, navigation type `.other`) loads only if it stays on the page's own site; a tapped link always loads. Anything else is dropped and a "Blocked a popup" banner offers to open it. **Known gap:** a script that clicks a hidden `<a target=_blank>` looks like a tap to WebKit and passes. The AdGuard Popups list is the second layer for that. `PopupPolicy` in Core.
+- **Element picker (2026-11-06):** long-press the shield, "Hide an element", tap it. Appends `host##selector` to the custom rules (`js/src/element-picker.js`, `NullView/ElementPicker.swift`).
 - **No blocking statistics** (iOS gives no blocked-request count). Post-MVP.
 - Accepted limitation: weaker than desktop uBlock (no per-request hooks, rule cap).
 - Only list downloads leave the device. Document this.
@@ -64,6 +67,7 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 
 - Injected scripts that talk to native (video detection, controls, the message bridge) run in an **isolated `WKContentWorld`**, in all frames.
 - **Exception (decided 2026-11-06):** the AdGuard cosmetic and scriptlet bundle runs in the **page world**, because scriptlets patch page APIs. It has **no message handler**, so the page gets no path to native code through it.
+- **The element picker (2026-11-06)** has its own isolated world (`nullview.picker`) and handler (`nvPicker`), evaluated only when the user starts it. So the page-world rule above still holds: nothing the page can reach talks to native. Native takes one message, a rule for the page being viewed, and `ElementRule.line` limits the selector charset (no `+js(`, no `#%#`, no newline).
 - Native accepts a small fixed set of messages with a schema and validation. No general-purpose bridge.
 - Treat page content as untrusted. Use the default iOS file protection. Data stays local.
 

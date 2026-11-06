@@ -14,6 +14,11 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] Open an ad-heavy page (for example dailymail.co.uk): far fewer ads than in Safari without a blocker.
 - [ ] Shield button: allow this site. The page reloads with ads. Remove it again and they are gone.
 - [ ] Custom rule `example.com##h1`, Save and apply: example.com has no heading.
+- [ ] Settings > Blocking: the three default lists are on; AdGuard Cookie Notices and AdGuard Popups are off. Turn Popups on: it downloads, shows a rule count, no red error. Turn it off: the row stays, the count is gone.
+- [ ] Add a list: `http://...` is refused. A real https list (for example `https://filters.adtidy.org/ios/filters/14_optimized.txt`) is added with rule counts. A junk https address (`https://example.com/`) is refused with an error and does not stay in the list. Swipe the added list: it is removed. Built-in rows cannot be swiped.
+- [ ] Background the app for a while with lists older than 24 h (or just wait a day), return to it: Settings shows a fresh "updated" time without relaunching.
+- [ ] Hide an element: on any page long-press the shield > Hide an element. Tap a banner or image: it is highlighted. Larger widens it. Hide removes it, and after reload it is still gone. Settings > Custom rules has a new `host##...` line. Cancel leaves the page and its links working. On an allowed site the menu item is disabled.
+- [ ] Popups: on a streaming or file-host site that opens ad windows when you tap play, no ad page takes over the tab and a "Blocked a popup" bar appears. Open loads it. A normal link that opens in a new tab (for example a Wikipedia external link) still loads. With the shield off for the site, popups load again. Note any site where a popup still gets through.
 
 ## Video
 - [ ] YouTube watch page: the video button appears. Tap it: landscape, controls on top.

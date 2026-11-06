@@ -4,7 +4,7 @@
 // hides it now. Swift turns that into a `host##selector` custom rule (ElementRule.line validates it).
 // ponytail: main frame only; no iframes. Class names with digits are skipped (build-hash classes change).
 (() => {
-  if (window.__nvPicker) return;
+  if (window.__nvPicker) return true;
   window.__nvPicker = true;
 
   // The same charset ElementRule.line accepts: no digits in names, no escapes, no quotes.
@@ -107,4 +107,5 @@
   window.addEventListener('scroll', draw, true);
   window.addEventListener('resize', draw);
   document.documentElement.append(host);
+  return true; // evaluateJavaScript reports an undefined result as a failure
 })();

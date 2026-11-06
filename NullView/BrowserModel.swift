@@ -25,7 +25,10 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     let watch: WatchState
     let sites: Sites
     let spotify: SpotifyPlayer
+    let picker: ElementPicker
     @Published var showSpotify = false
+    /// The last popup the page tried to open on its own; the banner offers to open it anyway.
+    @Published var blockedPopup: URL?
     nonisolated static let lastURLKey = "lastURL"
     private var cancellables: Set<AnyCancellable> = []
 
@@ -38,6 +41,10 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         let videoScript = VideoDetector.makeScript()
         let det = VideoDetector()
         det.attach(to: cfg.userContentController, scriptLoaded: videoScript != nil)
+        let pk = ElementPicker()
+        pk.attach(to: cfg.userContentController)
+        pk.webView = webView
+        picker = pk
         detector = det
         spotify = SpotifyPlayer { [weak det] in det?.note($0) }
         let scripts = [videoScript, VideoDetector.makeFullscreenHook()].compactMap { $0 }
@@ -53,6 +60,12 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         det.onReport = { [weak ws] in ws?.onReport() }
         super.init()
         ws.onNavigate = { [weak self] in self?.load($0) }
+        picker.log = { [weak det] in det?.note($0) }
+        picker.onRule = { [weak self] line in
+            Task { @MainActor in
+                if let e = await self?.blocker.addElementRule(line) { self?.detector.note("picker rule failed: \(e)") }
+            }
+        }
         // Diagnostics for the background-audio bug: why does the system stop playback?
         let nc = NotificationCenter.default
         nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] n in
@@ -132,6 +145,18 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         webView.reloadFromOrigin()
     }
 
+    /// Long-press on the shield: tap an element on the page to hide it. Needs blocking on for this site.
+    func pickElement() {
+        guard blocker.isBlocking(on: webView.url) else { return }
+        picker.start()
+    }
+
+    func openBlockedPopup() {
+        guard let u = blockedPopup else { return }
+        blockedPopup = nil
+        webView.load(URLRequest(url: u))
+    }
+
     func reload() {
         if let f = failure?.url { load(f) } else if webView.url != nil { webView.reload() }
     }
@@ -173,7 +198,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         }
     }
 
-    func webView(_ w: WKWebView, didStartProvisionalNavigation n: WKNavigation!) { failure = nil }
+    func webView(_ w: WKWebView, didStartProvisionalNavigation n: WKNavigation!) { failure = nil; blockedPopup = nil }
 
     func webView(_ w: WKWebView, didReceiveServerRedirectForProvisionalNavigation n: WKNavigation!) {
         detector.note("redirect -> \(w.url?.absoluteString.prefix(100) ?? "?")")
@@ -210,10 +235,20 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     // MARK: WKUIDelegate
 
-    /// `target=_blank` and `window.open` load in the same view (decisions.md).
+    /// `target=_blank` and `window.open` load in the same view (decisions.md), except a window the page
+    /// opens by script to another site (popunder ads): that is blocked and offered in a banner.
+    /// An allowlisted site gets no popup blocking, like everything else the shield turns off.
     func webView(_ w: WKWebView, createWebViewWith cfg: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if action.targetFrame == nil && !videoMode.active { w.load(action.request) }
+        guard action.targetFrame == nil, !videoMode.active else { return nil }
+        let url = action.request.url
+        if !blocker.isBlocking(on: w.url)
+            || PopupPolicy.allows(linkTap: action.navigationType == .linkActivated, from: w.url, to: url) {
+            w.load(action.request)
+        } else {
+            detector.note("blocked popup \(url?.absoluteString.prefix(100) ?? "about:blank")")
+            if let url, ["http", "https"].contains(url.scheme?.lowercased()) { blockedPopup = url }
+        }
         return nil
     }
 }

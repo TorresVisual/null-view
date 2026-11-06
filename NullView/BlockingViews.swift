@@ -7,7 +7,19 @@ struct BlockingSection: View {
 
     var body: some View {
         Section {
-            ForEach(Filters.defaults, id: \.id) { row($0.id, $0.name) }
+            ForEach(blocker.config.all, id: \.id) { l in
+                Toggle(isOn: Binding(get: { blocker.config.isEnabled(l.id) },
+                                     set: { on in Task { await blocker.setEnabled(l.id, on) } })) {
+                    row(l.id, l.name)
+                }
+                .disabled(blocker.isUpdating)
+                .deleteDisabled(!blocker.config.isCustom(l.id))
+            }
+            .onDelete { offsets in
+                let all = blocker.config.all
+                offsets.map { all[$0].id }.forEach { id in Task { await blocker.removeList(id) } }
+            }
+            NavigationLink("Add a list") { AddListView(blocker: blocker) }
             row(Blocker.customID, "Custom rules")
             if let e = blocker.errors["engine"] { Text(e).font(.footnote).foregroundStyle(.red) }
             Button { Task { await blocker.update() } } label: {
@@ -17,7 +29,7 @@ struct BlockingSection: View {
             NavigationLink("Custom rules") { CustomRulesView(blocker: blocker) }
             NavigationLink("Allowed sites (\(blocker.allowlist.hosts.count))") { AllowlistView(blocker: blocker) }
         } header: { Text("Blocking") } footer: {
-            Text("Lists update at launch when older than 24 hours. If an update fails, the last working lists keep blocking. Only the list downloads leave this device.")
+            Text("Lists update when older than 24 hours, at launch and when you come back to the app. Cookie Notices and Popups are off until you turn them on. Swipe a list you added to remove it. If an update fails, the last working lists keep blocking. Only the list downloads leave this device.")
         }
     }
 
@@ -52,7 +64,7 @@ struct CustomRulesView: View {
                     .autocorrectionDisabled()
                     .frame(minHeight: 220)
             } footer: {
-                Text("One rule per line, AdBlock Plus or AdGuard syntax. Example: ||ads.example.com^ or example.com##.banner")
+                Text("One rule per line, AdBlock Plus or AdGuard syntax. Example: ||ads.example.com^ or example.com##.banner. To hide something without typing a rule, long-press the shield in the toolbar and choose Hide an element.")
             }
             Section {
                 Button { save() } label: {
@@ -75,6 +87,47 @@ struct CustomRulesView: View {
         Task {
             message = await blocker.saveCustomRules(text)
             saving = false
+        }
+    }
+}
+
+struct AddListView: View {
+    @ObservedObject var blocker: Blocker
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var url = ""
+    @State private var message: String?
+    @State private var adding = false
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Name (optional)", text: $name)
+                TextField("https://example.com/list.txt", text: $url)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            } footer: {
+                Text("A filter list in AdBlock Plus or AdGuard syntax. Only https addresses. It is downloaded now and kept up to date like the others.")
+            }
+            Section {
+                Button { add() } label: {
+                    HStack { Text("Add"); if adding { Spacer(); ProgressView() } }
+                }
+                .disabled(adding || url.trimmingCharacters(in: .whitespaces).isEmpty)
+                if let message { Text(message).font(.footnote).foregroundStyle(.red) }
+            }
+        }
+        .navigationTitle("Add a list")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func add() {
+        adding = true
+        Task {
+            message = await blocker.addList(name: name, url: url)
+            adding = false
+            if message == nil { dismiss() }
         }
     }
 }

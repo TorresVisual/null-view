@@ -36,9 +36,11 @@ struct BrowserView: View {
             }
             if let u = watch.resumeOffer, !videoMode.active { resumeBar(u).transition(bar) }
             if clipboardOffer && !videoMode.active { clipboardBar.transition(bar) }
+            if model.blockedPopup != nil && !videoMode.active { popupBar.transition(bar) }
             if !videoMode.active { toolbar }
         }
         .animation(.easeInOut(duration: 0.2), value: clipboardOffer)
+        .animation(.easeInOut(duration: 0.2), value: model.blockedPopup)
         .animation(.easeInOut(duration: 0.2), value: watch.resumeOffer)
         .ignoresSafeArea(videoMode.active ? .all : [])
         .statusBarHidden(videoMode.active)
@@ -52,7 +54,7 @@ struct BrowserView: View {
         .onChange(of: scenePhase) { _, p in
             detector.note("app \(p)")
             if p != .active { watch.flush() }
-            if p == .active { checkClipboard() }
+            if p == .active { checkClipboard(); Task { await blocker.refreshIfStale() } }
         }
         .onAppear { checkClipboard() }
         .task { await blocker.start() }
@@ -111,6 +113,10 @@ struct BrowserView: View {
                 model.toggleBlocking()
             }
             .disabled(model.url == nil)
+            .contextMenu {
+                Button { model.pickElement() } label: { Label("Hide an element…", systemImage: "eye.slash") }
+                    .disabled(model.url == nil || !blocker.isBlocking(on: model.url))
+            }
             Spacer()
             tool("square.grid.2x2", "Sites") { showSites = true }
             Spacer()
@@ -173,6 +179,19 @@ struct BrowserView: View {
             Spacer()
             Button("Resume") { watch.enterVideoWhenReady() }.buttonStyle(.borderedProminent)
             Button { watch.resumeOffer = nil } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
+                .accessibilityLabel("Dismiss")
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    private var popupBar: some View {
+        HStack {
+            Image(systemName: "xmark.rectangle")
+            Text("Blocked a popup").font(.subheadline)
+            Spacer()
+            Button("Open") { model.openBlockedPopup() }.buttonStyle(.borderedProminent)
+            Button { model.blockedPopup = nil } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
                 .accessibilityLabel("Dismiss")
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
