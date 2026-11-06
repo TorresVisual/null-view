@@ -18,9 +18,58 @@ final class BlockingTests: XCTestCase {
         a.add("sub.other.org")
         XCTAssertFalse(a.contains("other.org"))
         XCTAssertTrue(a.contains("x.sub.other.org"))
-        XCTAssertEqual(a.entry(covering: "video.example.com"), "example.com")
         a.remove("example.com")
         XCTAssertFalse(a.contains("example.com"))
+    }
+
+    func testToggleOnlyAffectsTheCurrentHost() {
+        var a = AllowList(hosts: ["example.com"])
+        a.toggle("video.example.com")              // shield on a subdomain of an allowed site
+        XCTAssertFalse(a.contains("video.example.com"))
+        XCTAssertTrue(a.contains("example.com"))
+        XCTAssertTrue(a.contains("shop.example.com"))
+        XCTAssertFalse(a.contains("a.video.example.com"))   // exception covers its own subdomains
+        XCTAssertEqual(a.hosts, ["example.com"])
+        a.toggle("video.example.com")              // back: no redundant entry left behind
+        XCTAssertTrue(a.contains("video.example.com"))
+        XCTAssertEqual(a, AllowList(hosts: ["example.com"]))
+    }
+
+    func testToggleParentKeepsMoreSpecificChoices() {
+        var a = AllowList(hosts: ["example.com"])
+        a.toggle("video.example.com")              // blocked exception
+        a.toggle("example.com")                    // block the parent too
+        XCTAssertFalse(a.contains("example.com"))
+        XCTAssertFalse(a.contains("shop.example.com"))
+        a.toggle("shop.example.com")               // allow one child under a blocked parent
+        XCTAssertTrue(a.contains("shop.example.com"))
+        XCTAssertFalse(a.contains("example.com"))
+        XCTAssertFalse(a.contains("video.example.com"))
+        a.toggle("www.example.com")                // www is the same site as example.com
+        XCTAssertTrue(a.contains("example.com"))
+        XCTAssertFalse(a.contains("video.example.com"))
+    }
+
+    func testRemoveDropsOrphanedExceptionsAndAddClearsThem() {
+        var a = AllowList(hosts: ["example.com"])
+        a.toggle("video.example.com")
+        a.remove("example.com")
+        a.add("example.com")                       // must not resurrect the old exception
+        XCTAssertTrue(a.contains("video.example.com"))
+        a.toggle("video.example.com")
+        a.add("video.example.com")                 // Settings "Add" on an excepted host allows it
+        XCTAssertTrue(a.contains("video.example.com"))
+    }
+
+    func testAllowListDecodesOldFormat() throws {
+        let old = Data(#"{"hosts":["a.com"]}"#.utf8)
+        let a = try JSONDecoder().decode(AllowList.self, from: old)
+        XCTAssertEqual(a.hosts, ["a.com"])
+        var b = a
+        b.toggle("x.a.com")
+        let back = try JSONDecoder().decode(AllowList.self, from: JSONEncoder().encode(b))
+        XCTAssertEqual(back, b)
+        XCTAssertFalse(back.contains("x.a.com"))
     }
 
     func testAllowListCodable() throws {

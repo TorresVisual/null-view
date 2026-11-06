@@ -1,10 +1,22 @@
 import Foundation
 
 /// Hosts where blocking is off. An entry covers the host and all its subdomains.
+/// `blocked` holds exceptions under an allowed parent (blocking back on for one subdomain);
+/// the most specific entry covering a host decides.
 public struct AllowList: Codable, Equatable {
     public private(set) var hosts: [String] = []
+    public private(set) var blocked: [String] = []
 
     public init(hosts: [String] = []) { hosts.forEach { add($0) } }
+
+    private enum CodingKeys: String, CodingKey { case hosts, blocked }
+
+    /// `blocked` is optional so lists saved before it existed still load.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        hosts = try c.decode([String].self, forKey: .hosts)
+        blocked = try c.decodeIfPresent([String].self, forKey: .blocked) ?? []
+    }
 
     /// Lowercased, without `www.`; nil for empty or non-host text.
     public static func normalize(_ host: String?) -> String? {
@@ -13,19 +25,40 @@ public struct AllowList: Codable, Equatable {
         return h.isEmpty || h.contains(where: { $0.isWhitespace || $0 == "/" }) ? nil : h
     }
 
-    /// The entry that covers `host` (the host itself or a parent domain), if any.
-    public func entry(covering host: String?) -> String? {
-        guard let h = Self.normalize(host) else { return nil }
-        return hosts.first { h == $0 || h.hasSuffix("." + $0) }
-    }
+    private static func covers(_ entry: String, _ host: String) -> Bool { host == entry || host.hasSuffix("." + entry) }
 
-    public func contains(_ host: String?) -> Bool { entry(covering: host) != nil }
+    /// True if blocking is off for `host`: its most specific covering entry (longest, since all are
+    /// suffixes of `host`) is an allowed host, not a blocked exception.
+    public func contains(_ host: String?) -> Bool {
+        guard let h = Self.normalize(host) else { return false }
+        let a = hosts.filter { Self.covers($0, h) }.map(\.count).max()
+        guard let a else { return false }
+        return a > (blocked.filter { Self.covers($0, h) }.map(\.count).max() ?? -1)
+    }
 
     public mutating func add(_ host: String?) {
-        if let h = Self.normalize(host), !hosts.contains(h) { hosts = (hosts + [h]).sorted() }
+        guard let h = Self.normalize(host) else { return }
+        blocked.removeAll { $0 == h }
+        if !hosts.contains(h) { hosts = (hosts + [h]).sorted() }
     }
 
-    public mutating func remove(_ host: String) { hosts.removeAll { $0 == host } }
+    /// Drops an allowed entry, plus exceptions that no allowed parent covers any more.
+    public mutating func remove(_ host: String) {
+        hosts.removeAll { $0 == host }
+        blocked.removeAll { b in !hosts.contains { Self.covers($0, b) } }
+    }
+
+    /// Flip blocking for exactly this host (and its subdomains), leaving parents alone.
+    /// Stores an entry only when the flip is not already implied by a parent.
+    public mutating func toggle(_ host: String?) {
+        guard let h = Self.normalize(host) else { return }
+        let allow = !contains(h)
+        hosts.removeAll { $0 == h }
+        blocked.removeAll { $0 == h }
+        if allow != contains(h) {
+            if allow { hosts = (hosts + [h]).sorted() } else { blocked = (blocked + [h]).sorted() }
+        }
+    }
 }
 
 public struct FilterList: Codable, Equatable {

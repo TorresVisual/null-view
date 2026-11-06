@@ -219,7 +219,7 @@ final class Blocker: ObservableObject {
     /// Allowlist or un-allowlist the page's site. The caller reloads.
     func toggleAllow(for url: URL?) {
         guard let host = url?.host else { return }
-        if let e = allowlist.entry(covering: host) { allowlist.remove(e) } else { allowlist.add(host) }
+        allowlist.toggle(host)
         saveAllowlist()
         apply(for: url)
     }
