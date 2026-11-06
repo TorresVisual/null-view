@@ -62,7 +62,7 @@ final class Blocker: ObservableObject {
     /// Launch: load the compiled lists from the store (fast, offline), then refresh if stale.
     func start() async {
         for id in ids {
-            if let l = try? await WKContentRuleListStore.default().lookUpContentRuleList(forIdentifier: id) { compiled[id] = l }
+            if let l = await Self.lookUp(id) { compiled[id] = l }
         }
         await rebuildEngine()
         refreshAttachment()
@@ -169,7 +169,7 @@ final class Blocker: ObservableObject {
             else { throw BlockerError.compile }
             compiled[id] = list
         } else if allowEmpty {
-            try? await store.removeContentRuleList(forIdentifier: id)
+            await Self.remove(id)
             compiled[id] = nil
         } else {
             throw BlockerError.empty  // an error page or junk, not a filter list
@@ -178,6 +178,19 @@ final class Blocker: ObservableObject {
         meta[id] = ListMeta(updated: Date(), safariRules: r.safariRulesCount, sourceRules: r.sourceRulesCount,
                             invalidRules: r.errorsCount, discardedRules: r.discardedSafariRules)
         try? JSONEncoder().encode(meta).write(to: dir.appendingPathComponent("meta.json"), options: .atomic)
+    }
+
+    // The store's lookUp/remove have no async overload in the SDK, so wrap the completion handlers.
+    private static func lookUp(_ id: String) async -> WKContentRuleList? {
+        await withCheckedContinuation { c in
+            WKContentRuleListStore.default().lookUpContentRuleList(forIdentifier: id) { list, _ in c.resume(returning: list) }
+        }
+    }
+
+    private static func remove(_ id: String) async {
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            WKContentRuleListStore.default().removeContentRuleList(forIdentifier: id) { _ in c.resume() }
+        }
     }
 
     private func advancedURL(_ id: String) -> URL { dir.appendingPathComponent("\(id).advanced.txt") }
