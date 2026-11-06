@@ -29,6 +29,11 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// mobile page sends you to the app. So spotify.com gets a desktop UA. Content mode alone was ignored on
     /// some loads (the log showed an iPhone UA), so the UA is also pinned, per navigation.
     private static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
+    /// Must run before a load starts: a UA set inside decidePolicyFor only reached the next navigation
+    /// (the log showed iPhone UAs on every Spotify load that followed another site).
+    private func applyUA(for url: URL?) {
+        webView.customUserAgent = url?.host?.hasSuffix("spotify.com") == true ? Self.desktopUA : nil
+    }
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -84,6 +89,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         // Relaunch: reopen the last page. Nothing is played until the user taps the banner.
         watch.library.prune()
         if let s = UserDefaults.standard.string(forKey: Self.lastURLKey), let u = AddressInput.webURL(s) {
+            applyUA(for: u)
             webView.load(URLRequest(url: u))
             if watch.library.hasRecord(onPage: u) { watch.resumeOffer = u }
         }
@@ -114,6 +120,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     func load(_ url: URL) {
         videoMode.exit()
         watch.resumeOffer = nil
+        applyUA(for: url)
         webView.load(URLRequest(url: url))
     }
     func goBack() { webView.goBack() }
@@ -143,9 +150,9 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction,
                  preferences: WKWebpagePreferences) async -> (WKNavigationActionPolicy, WKWebpagePreferences) {
         if action.targetFrame?.isMainFrame ?? true {
-            let desktop = action.request.url?.host?.hasSuffix("spotify.com") == true
-            preferences.preferredContentMode = desktop ? .desktop : .recommended
-            w.customUserAgent = desktop ? Self.desktopUA : nil
+            preferences.preferredContentMode = action.request.url?.host?.hasSuffix("spotify.com") == true ? .desktop : .recommended
+            // Covers links and redirects; the UA itself is set ahead of time in applyUA (applies from the next load).
+            applyUA(for: action.request.url)
         }
         return (policy(for: action), preferences)
     }
@@ -224,7 +231,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// `target=_blank` and `window.open` load in the same view (decisions.md).
     func webView(_ w: WKWebView, createWebViewWith cfg: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if action.targetFrame == nil && !videoMode.active { w.load(action.request) }
+        if action.targetFrame == nil && !videoMode.active { applyUA(for: action.request.url); w.load(action.request) }
         return nil
     }
 }
