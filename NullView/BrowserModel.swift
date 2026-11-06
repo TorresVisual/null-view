@@ -24,27 +24,9 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     let videoMode: VideoMode
     let watch: WatchState
     let sites: Sites
+    let spotify: SpotifyPlayer
+    @Published var showSpotify = false
     nonisolated static let lastURLKey = "lastURL"
-    /// Spotify spike: its web player plays albums in order, the phone app shuffles on free accounts, and its
-    /// mobile page sends you to the app. So spotify.com gets a desktop UA. Content mode alone was ignored on
-    /// some loads (the log showed an iPhone UA), so the UA is also pinned, per navigation.
-    private static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
-    /// The customUserAgent route kept giving Spotify an iPhone UA after a cross-site switch, so also tell
-    /// the page itself. Page world on purpose (it patches page APIs, like the AdGuard bundle); no message handler.
-    private static let desktopSpoof = WKUserScript(source: """
-        if (/(^|\\.)spotify\\.com$/.test(location.hostname)) {
-          const UA = '\(desktopUA)';
-          const d = (k, v) => Object.defineProperty(Navigator.prototype, k, { get: () => v, configurable: true });
-          d('userAgent', UA); d('appVersion', UA.slice(8)); d('platform', 'MacIntel');
-          d('maxTouchPoints', 0); d('vendor', 'Apple Computer, Inc.');
-        }
-        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
-
-    /// Must run before a load starts: a UA set inside decidePolicyFor only reached the next navigation
-    /// (the log showed iPhone UAs on every Spotify load that followed another site).
-    private func applyUA(for url: URL?) {
-        webView.customUserAgent = url?.host?.hasSuffix("spotify.com") == true ? Self.desktopUA : nil
-    }
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -57,7 +39,8 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         let det = VideoDetector()
         det.attach(to: cfg.userContentController, scriptLoaded: videoScript != nil)
         detector = det
-        let scripts = [videoScript, VideoDetector.makeFullscreenHook(), Self.desktopSpoof].compactMap { $0 }
+        spotify = SpotifyPlayer { [weak det] in det?.note($0) }
+        let scripts = [videoScript, VideoDetector.makeFullscreenHook()].compactMap { $0 }
         blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: scripts)
         det.webView = webView
         videoMode = VideoMode(detector: det, webView: webView)
@@ -100,7 +83,6 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         // Relaunch: reopen the last page. Nothing is played until the user taps the banner.
         watch.library.prune()
         if let s = UserDefaults.standard.string(forKey: Self.lastURLKey), let u = AddressInput.webURL(s) {
-            applyUA(for: u)
             webView.load(URLRequest(url: u))
             if watch.library.hasRecord(onPage: u) { watch.resumeOffer = u }
         }
@@ -129,9 +111,14 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     /// An explicit load (address bar, deep link) ends video mode first: the lock only stops pages from navigating.
     func load(_ url: URL) {
+        // Spotify links (address bar, Sites, deep links, clipboard) go to the dedicated Spotify view.
+        if SpotifyPlayer.isSpotify(url) {
+            spotify.open(url)
+            showSpotify = true
+            return
+        }
         videoMode.exit()
         watch.resumeOffer = nil
-        applyUA(for: url)
         webView.load(URLRequest(url: url))
     }
     func goBack() { webView.goBack() }
@@ -158,17 +145,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     /// Fail closed: only web pages load. `tel:`, `file:`, app-store schemes and the like are
     /// cancelled, and a page cannot navigate the top frame to a `data:` document.
-    func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction,
-                 preferences: WKWebpagePreferences) async -> (WKNavigationActionPolicy, WKWebpagePreferences) {
-        if action.targetFrame?.isMainFrame ?? true {
-            preferences.preferredContentMode = action.request.url?.host?.hasSuffix("spotify.com") == true ? .desktop : .recommended
-            // Covers links and redirects; the UA itself is set ahead of time in applyUA (applies from the next load).
-            applyUA(for: action.request.url)
-        }
-        return (policy(for: action), preferences)
-    }
-
-    private func policy(for action: WKNavigationAction) -> WKNavigationActionPolicy {
+    func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
         // Video mode lock: the page cannot navigate the main frame or open windows (popups, redirects).
         if videoMode.active, action.targetFrame?.isMainFrame ?? true {
             detector.note("locked: cancelled \(action.request.url?.absoluteString.prefix(80) ?? "?")")
@@ -211,12 +188,6 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
         if let u = w.url { watch.library.visit(u, title: w.title ?? "") }
-        // Spotify spike: does this WebView expose encrypted-media APIs, and which UA did the page get?
-        if w.url?.host?.hasSuffix("spotify.com") == true {
-            w.evaluateJavaScript("[typeof navigator.requestMediaKeySystemAccess, typeof window.WebKitMediaKeys, navigator.platform, navigator.maxTouchPoints, navigator.userAgent.slice(0, 70)].join(' | ')") { [weak self] r, _ in
-                MainActor.assumeIsolated { self?.detector.note("spotify eme: \(r as? String ?? "js failed")") }
-            }
-        }
     }
 
     func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { fail(e) }
@@ -242,7 +213,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// `target=_blank` and `window.open` load in the same view (decisions.md).
     func webView(_ w: WKWebView, createWebViewWith cfg: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if action.targetFrame == nil && !videoMode.active { applyUA(for: action.request.url); w.load(action.request) }
+        if action.targetFrame == nil && !videoMode.active { w.load(action.request) }
         return nil
     }
 }
