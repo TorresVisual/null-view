@@ -25,6 +25,8 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     let watch: WatchState
     let sites: Sites
     nonisolated static let lastURLKey = "lastURL"
+    /// Spotify spike: load pages as the desktop site (its web player plays albums in order; the phone app shuffles).
+    nonisolated static let desktopSiteKey = "desktopSite"
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -136,7 +138,13 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     /// Fail closed: only web pages load. `tel:`, `file:`, app-store schemes and the like are
     /// cancelled, and a page cannot navigate the top frame to a `data:` document.
-    func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
+    func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 preferences: WKWebpagePreferences) async -> (WKNavigationActionPolicy, WKWebpagePreferences) {
+        preferences.preferredContentMode = UserDefaults.standard.bool(forKey: Self.desktopSiteKey) ? .desktop : .recommended
+        return (policy(for: action), preferences)
+    }
+
+    private func policy(for action: WKNavigationAction) -> WKNavigationActionPolicy {
         // Video mode lock: the page cannot navigate the main frame or open windows (popups, redirects).
         if videoMode.active, action.targetFrame?.isMainFrame ?? true {
             detector.note("locked: cancelled \(action.request.url?.absoluteString.prefix(80) ?? "?")")
@@ -179,6 +187,12 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
         if let u = w.url { watch.library.visit(u, title: w.title ?? "") }
+        // Spotify spike: does this WebView expose encrypted-media APIs, and which UA did the page get?
+        if w.url?.host?.hasSuffix("spotify.com") == true {
+            w.evaluateJavaScript("[typeof navigator.requestMediaKeySystemAccess, typeof window.WebKitMediaKeys, navigator.userAgent.slice(0, 90)].join(' | ')") { [weak self] r, _ in
+                MainActor.assumeIsolated { self?.detector.note("spotify eme: \(r as? String ?? "js failed")") }
+            }
+        }
     }
 
     func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { fail(e) }
