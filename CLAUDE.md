@@ -1,6 +1,8 @@
 # null-view
 
-iOS-only personal video browser (Swift, WKWebView). Spec: `docs/brief.md`. No Mac available: all iOS builds happen on a GitHub Actions macOS runner.
+iOS-only personal video browser (Swift, WKWebView). No Mac available: all iOS builds happen on a GitHub Actions macOS runner.
+
+**Read `docs/decisions.md` first.** It is the source of truth and overrides `docs/brief.md` (the original intent and phase outline). Current step: Phase 0 feasibility gate. Don't build the full app before it passes.
 
 ## CI cost rule (macOS runner)
 
