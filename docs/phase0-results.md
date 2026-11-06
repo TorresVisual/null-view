@@ -11,6 +11,6 @@ Device: iPhone, iOS 26.6.2, sideloaded via AltStore. App built by the `build-ios
 | 2 Cosmetic CSS | **Inconclusive** | The probe looked for an `h1` and found none (`no h1`), so nothing was measured. Run 2 probes `body` and logs the page title. |
 | 3 PiP | **Inconclusive (fixture broken)** | `video error 4`: the sample URL (Google's `gtv-videos-bucket`) now returns HTTP 403, so no media loaded and `webkitSupportsPresentationMode` was `false`. Run 2 uses Apple's HLS sample and MDN's MP4. |
 | 4 Background audio | Not run | Needs a working video. |
-| 5 URL scheme | Not run | |
+| 5 URL scheme | **Pass** | A Shortcut ("Open URLs" with `nullview://open?url=…`) opened the sideloaded app on a free Apple ID. No extra app ID needed. |
 
 Takeaway: the risky part (real lists compile within the rule cap, scriptlets inject through a user script) works. The remaining gates are about video and the URL scheme.
