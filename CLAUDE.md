@@ -5,15 +5,16 @@ iOS-only personal video browser (Swift, SwiftUI + WKWebView), sideloaded via Alt
 ## Start here
 
 1. Read `docs/decisions.md`. It is the source of truth and overrides `docs/brief.md`.
-2. Status: Phase 0 passed (`docs/phase0-results.md`). Current step: **Phase 1, browser foundation**. Phases 2 to 8 follow the brief, adjusted by `decisions.md`.
-3. `NullView/Spike*.swift`, `NullView/video-test.html` and `docs/phase0.md` are throwaway spike material. Replace them, don't extend them.
+2. Status: Phase 0 passed (`docs/phase0-results.md`). Phase 1 (browser foundation) is written and waiting for its first runner build and phone test. Phases 2 to 8 follow the brief, adjusted by `decisions.md`.
+3. The Phase 0 spike (blocker, PiP and audio fixtures) was deleted in Phase 1 but lives in git history (commit `bdba6a0`). Phase 2 re-adds the blocker from there. `project.yml` still carries the AdGuard dependency and JS bundle for that.
 
 If a task would break a decision in `decisions.md` or fail an assumption in it, stop and ask the owner. Don't silently fall back to a weaker design (for example a home-grown blocker).
 
 ## Layout
 
 - `project.yml`: XcodeGen spec. The `.xcodeproj` and `Info.plist` are generated and git-ignored.
-- `NullView/`: the app target (Apple frameworks allowed).
+- `Core/`: pure-Swift package `NullViewCore` (address-bar resolution, deep links). Tests: `swift test --build-system native` in `Core/`, via the vcvars batch below.
+- `NullView/`: the app target (Apple frameworks allowed). `BrowserModel` owns the WebView, `BrowserView` and `SettingsView` are the UI.
 - `js/`: npm project that bundles AdGuard's cosmetic/scriptlet script to `js/dist/adblock-content.js`. Built on Linux in CI, git-ignored.
 - `.github/workflows/build-ios.yml`: manual-trigger build of the unsigned IPA.
 

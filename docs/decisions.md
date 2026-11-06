@@ -7,7 +7,7 @@ Settled in a grilling session on 2026-11-06. This file **overrides** `docs/brief
 - Owner uses an **iPhone on iOS 26.6.2** and a **Windows PC**. There is **no Mac and no Xcode**.
 - Free Apple ID only (no paid developer account). The free account has 3 active-app slots, and **AltStore plus another app the owner built already use them**. Anything needing an extra app ID (share extension, widgets) is out.
 - Personal use, sideloaded via AltStore (re-signs every 7 days). No App Store, no store-policy work.
-- **Phase 0 passed on 2026-11-06** (see `docs/phase0-results.md`). `NullView/` currently holds the throwaway spike app. **Next step: Phase 1**, which replaces the spike with the real app.
+- **Phase 0 passed on 2026-11-06** (see `docs/phase0-results.md`). Phase 1 (browser foundation) is written: `Core/` plus the SwiftUI shell in `NullView/`. It has not been compiled on the runner or tried on the phone yet. The spike is in git history.
 
 ## Platform and stack
 

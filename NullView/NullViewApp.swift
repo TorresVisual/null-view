@@ -1,20 +1,20 @@
 import AVFoundation
+import NullViewCore
 import SwiftUI
 
 @main
 struct NullViewApp: App {
-    @StateObject private var spike = Spike()
+    @StateObject private var browser = BrowserModel()
 
     init() {
-        // Phase 0 gate 4: background audio needs a .playback session + UIBackgroundModes=audio.
+        // .playback lets video audio play with the silent switch on and in the background.
         try? AVAudioSession.sharedInstance().setCategory(.playback)
-        try? AVAudioSession.sharedInstance().setActive(true)
     }
 
     var body: some Scene {
         WindowGroup {
-            SpikeView(spike: spike)
-                .onOpenURL { spike.handleOpen($0) } // gate 5: nullview://open?url=...
+            BrowserView(model: browser)
+                .onOpenURL { if let u = DeepLink.parse($0) { browser.load(u) } }
         }
     }
 }
