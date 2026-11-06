@@ -29,7 +29,8 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// start smaller, lower it to start bigger (the page then drops the right panel).
     private static let fitViewport = """
         (() => {
-          const W = 1950, s = (screen.width / W).toFixed(3), content = `width=${W}, initial-scale=${s}, minimum-scale=${s}, maximum-scale=4, user-scalable=yes`;
+          // screen.width read 844 (the phone's height) in this WebView, so take the shorter side: the portrait width.
+          const W = 1950, s = (Math.min(screen.width, screen.height) / W).toFixed(3), content = `width=${W}, initial-scale=${s}, minimum-scale=${s}, maximum-scale=4, user-scalable=yes`;
           const fix = () => {
             let ms = document.querySelectorAll('meta[name=viewport]');
             if (!ms.length && document.head) { const m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); ms = [m]; }
