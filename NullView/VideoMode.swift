@@ -170,6 +170,8 @@ final class VideoMode: ObservableObject {
 
 struct HUDLevel: Equatable {
     let symbol: String, label: String, value: Double
+    /// Brightness sits on the left edge, volume on the right, matching the half of the screen being dragged.
+    let leading: Bool
 }
 
 /// System volume through a hidden `MPVolumeView` slider.
@@ -263,6 +265,9 @@ struct VideoModeView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(l.label)
         .accessibilityValue("\(Int(l.value * 100)) percent")
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: l.leading ? .leading : .trailing)
+        .allowsHitTesting(false)
     }
 
     private func circleButton(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
@@ -337,9 +342,9 @@ final class SurfaceView: UIView {
                 let v = VideoGestures.level(start: startLevel, dy: t.y, height: bounds.height)
                 if onLeft {
                     mode.screen.brightness = CGFloat(v)
-                    mode.flash(level: HUDLevel(symbol: "sun.max.fill", label: "Brightness", value: v))
+                    mode.flash(level: HUDLevel(symbol: "sun.max.fill", label: "Brightness", value: v, leading: true))
                 } else if mode.volume.set(v) {
-                    mode.flash(level: HUDLevel(symbol: "speaker.wave.2.fill", label: "Volume", value: v))
+                    mode.flash(level: HUDLevel(symbol: "speaker.wave.2.fill", label: "Volume", value: v, leading: false))
                 } else {
                     mode.flash("Volume control unavailable")
                 }
