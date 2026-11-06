@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "esbuild src/adblock-content.js --bundle --format=iife --minify --alias:webextension-polyfill=./src/browser-stub.js --outfile=dist/adblock-content.js",
-    "test": "node --test"
+    "test": "node --test",
+    "corpus": "node corpus/run.mjs"
   },
   "dependencies": {
     "@adguard/safari-extension": "4.3.1"
