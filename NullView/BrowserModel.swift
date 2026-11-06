@@ -140,6 +140,13 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         }
         guard let scheme = action.request.url?.scheme?.lowercased() else { return .allow }
         if action.targetFrame?.isMainFrame == true, scheme == "http" || scheme == "https" {
+            // iOS hands tapped links to the domain's installed app (Universal Links, e.g. x.com).
+            // Only link taps trigger it, so cancel the tap and load the URL ourselves (issue #10).
+            // The reload has navigationType .other, so it comes back through here and is allowed.
+            if action.navigationType == .linkActivated {
+                w.load(action.request)
+                return .cancel
+            }
             blocker.apply(for: action.request.url)
         }
         switch scheme {
