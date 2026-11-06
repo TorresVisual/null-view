@@ -7,7 +7,6 @@ struct SettingsView: View {
     let detector: VideoDetector
     @Environment(\.dismiss) private var dismiss
     @AppStorage(BrowserModel.searchTemplateKey) private var template = AddressInput.defaultSearchTemplate
-    @AppStorage(BrowserModel.desktopSiteKey) private var desktopSite = false
     @State private var confirmClear = false
     @State private var cleared = false
 
@@ -29,11 +28,6 @@ struct SettingsView: View {
                     Text("Text that is not a web address opens this URL, with %s replaced by what you typed.")
                 }
                 Section {
-                    Toggle("Request desktop site", isOn: $desktopSite)
-                } footer: {
-                    Text("Loads pages as on a computer. Applies to the next page load.")
-                }
-                Section {
                     Text("nullview://open?url=")
                         .font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
                 } header: { Text("Sharing") } footer: {
@@ -51,7 +45,6 @@ struct SettingsView: View {
                     Text("Nothing leaves this device except the pages you open.")
                 }
             }
-            .onChange(of: desktopSite) { model.applyDesktopSite(); model.reload() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }

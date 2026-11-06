@@ -25,14 +25,10 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     let watch: WatchState
     let sites: Sites
     nonisolated static let lastURLKey = "lastURL"
-    /// Spotify spike: load pages as the desktop site (its web player plays albums in order; the phone app shuffles).
-    nonisolated static let desktopSiteKey = "desktopSite"
-    /// Content mode alone was ignored on back/forward and redirected loads (the log showed an iPhone UA), so also pin the UA.
+    /// Spotify spike: its web player plays albums in order, the phone app shuffles on free accounts, and its
+    /// mobile page sends you to the app. So spotify.com gets a desktop UA. Content mode alone was ignored on
+    /// some loads (the log showed an iPhone UA), so the UA is also pinned, per navigation.
     private static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
-
-    func applyDesktopSite() {
-        webView.customUserAgent = UserDefaults.standard.bool(forKey: Self.desktopSiteKey) ? Self.desktopUA : nil
-    }
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -72,7 +68,6 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
         webView.isInspectable = true
-        applyDesktopSite()
 
         let w = webView
         Publishers.MergeMany([
@@ -147,7 +142,11 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// cancelled, and a page cannot navigate the top frame to a `data:` document.
     func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction,
                  preferences: WKWebpagePreferences) async -> (WKNavigationActionPolicy, WKWebpagePreferences) {
-        preferences.preferredContentMode = UserDefaults.standard.bool(forKey: Self.desktopSiteKey) ? .desktop : .recommended
+        if action.targetFrame?.isMainFrame ?? true {
+            let desktop = action.request.url?.host?.hasSuffix("spotify.com") == true
+            preferences.preferredContentMode = desktop ? .desktop : .recommended
+            w.customUserAgent = desktop ? Self.desktopUA : nil
+        }
         return (policy(for: action), preferences)
     }
 
