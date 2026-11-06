@@ -4,3 +4,4 @@ NullView.xcodeproj
 NullView/Info.plist
 build
 SourcePackages
+.null/
