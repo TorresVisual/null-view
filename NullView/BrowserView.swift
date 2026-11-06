@@ -45,7 +45,7 @@ struct BrowserView: View {
         .persistentSystemOverlays(videoMode.active ? .hidden : .automatic)
         .sheet(isPresented: $showLibrary) { LibraryView(model: model) }
         .sheet(isPresented: $showSites) { SitesSheet(model: model) }
-        .sheet(isPresented: $model.showSpotify) { SpotifySheet(player: model.spotify) }
+        .overlay { SpotifyOverlay(player: model.spotify, show: $model.showSpotify) }
         .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker, detector: detector) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }

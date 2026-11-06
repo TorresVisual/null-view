@@ -15,6 +15,23 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     private static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
 
+    /// Page world on purpose (it patches page APIs); no message handler.
+    private static let alwaysVisible = """
+        for (const [k, v] of [['hidden', false], ['webkitHidden', false], ['visibilityState', 'visible'], ['webkitVisibilityState', 'visible']]) {
+          Object.defineProperty(Document.prototype, k, { get: () => v, configurable: true });
+        }
+        document.addEventListener('visibilitychange', e => e.stopImmediatePropagation(), true);
+        """
+
+    /// FRAGILE: private WKPreferences setter, called only if it exists. Returns whether it was applied.
+    private static func setPrivateBool(_ selector: String, _ value: Bool, on obj: NSObject) -> Bool {
+        let sel = NSSelectorFromString(selector)
+        guard obj.responds(to: sel), let imp = obj.method(for: sel) else { return false }
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(imp, to: Setter.self)(obj, sel, value)
+        return true
+    }
+
     let webView: WKWebView
     private let note: (String) -> Void
     private var requested: URL?
@@ -25,6 +42,12 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
         cfg.allowsInlineMediaPlayback = true
         cfg.mediaTypesRequiringUserActionForPlayback = []
         cfg.defaultWebpagePreferences.preferredContentMode = .desktop
+        // Track changes are driven by page timers; a page that thinks it is hidden gets them throttled,
+        // which stalls the hop to the next track (locked screen, closed overlay).
+        cfg.userContentController.addUserScript(WKUserScript(source: Self.alwaysVisible, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        for name in ["_setHiddenPageDOMTimerThrottlingEnabled:", "_setPageVisibilityBasedProcessSuppressionEnabled:"] {
+            note("spotify private pref \(name) " + (Self.setPrivateBool(name, false, on: cfg.preferences) ? "applied" : "missing"))
+        }
         webView = WKWebView(frame: .zero, configuration: cfg)
         webView.customUserAgent = Self.desktopUA
         webView.isInspectable = true
@@ -63,17 +86,26 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 }
 
-struct SpotifySheet: View {
+/// Always in the view tree, shown or faded out: a web view removed from the window stops running the
+/// page's timers, so closing a sheet stopped playback at the end of the current track.
+struct SpotifyOverlay: View {
     let player: SpotifyPlayer
-    @Environment(\.dismiss) private var dismiss
+    @Binding var show: Bool
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Spotify").font(.headline)
+                Spacer()
+                Button("Done") { show = false }.frame(minWidth: 44, minHeight: 44)
+            }
+            .padding(.horizontal, 16)
+            .background(.bar)
             WebViewHost(webView: player.webView)
-                .ignoresSafeArea(edges: .bottom)
-                .navigationTitle("Spotify")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
+        .background(Color.black.ignoresSafeArea())
+        .opacity(show ? 1 : 0)
+        .allowsHitTesting(show)
+        .accessibilityHidden(!show)
     }
 }
