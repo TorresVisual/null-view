@@ -31,6 +31,7 @@ targets:
         SWIFT_VERSION: "5.0" # avoid Swift 6 strict-concurrency errors; we can't compile locally
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGNING_ALLOWED: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: NullView/Info.plist
       properties:
