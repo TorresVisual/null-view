@@ -54,7 +54,8 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 
 ## JS bridge and security
 
-- All injected scripts run in an **isolated `WKContentWorld`**, in all frames.
+- Injected scripts that talk to native (video detection, controls, the message bridge) run in an **isolated `WKContentWorld`**, in all frames.
+- **Exception (decided 2026-11-06):** the AdGuard cosmetic and scriptlet bundle runs in the **page world**, because scriptlets patch page APIs. It has **no message handler**, so the page gets no path to native code through it.
 - Native accepts a small fixed set of messages with a schema and validation. No general-purpose bridge.
 - Treat page content as untrusted. Use the default iOS file protection. Data stays local.
 
@@ -107,7 +108,7 @@ Phase 0 is also the first test of the whole pipeline: XcodeGen, an unsigned IPA 
 - Public-repo macOS runners are free (billing).
 - AltStore's handling of the free-account app-ID limit, and whether a URL scheme needs nothing extra.
 - That `MPVolumeView` volume control still works on iOS 26.
-- That the AdGuard converter builds with the Swift toolchain on Windows. If not, the pure-Swift package must not depend on it directly.
+- ~~That the AdGuard converter builds with the Swift toolchain on Windows.~~ **Checked 2026-11-06 (Swift 6.4.2, v4.3.1): partly.** The `ContentBlockerConverter` module (list text to Safari JSON) compiles on Windows. The `FilterEngine` module (`WebExtension`, cosmetic/scriptlet lookup) does **not**, because it uses POSIX `flock`. So the pure-Swift package may depend on `ContentBlockerConverter` but must keep `FilterEngine` behind a protocol and out of Windows tests. Windows build quirks: clone with `core.autocrlf=false` (the version plugin fails on CRLF), and the plugin needs `/usr/bin/true` with the native build system (we stubbed it in a throwaway clone). The plain `swift build` default build system fails to find MSVC headers in this shell.
 - Whether `requestFullscreen` interception works reliably inside `WKWebView` on iOS 26.
 
 ## Remaining phases
