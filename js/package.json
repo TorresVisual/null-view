@@ -1,0 +1,14 @@
+{
+  "name": "null-view-js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/adblock-content.js --bundle --format=iife --minify --alias:webextension-polyfill=./src/browser-stub.js --outfile=dist/adblock-content.js"
+  },
+  "dependencies": {
+    "@adguard/safari-extension": "4.3.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

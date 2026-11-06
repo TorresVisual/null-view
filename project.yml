@@ -1,0 +1,39 @@
+name: NullView
+options:
+  bundleIdPrefix: com.nullview
+  deploymentTarget:
+    iOS: "26.0"
+packages:
+  SafariConverterLib:
+    url: https://github.com/AdguardTeam/SafariConverterLib
+    exactVersion: 4.3.1
+targets:
+  NullView:
+    type: application
+    platform: iOS
+    sources:
+      - NullView
+      - path: js/dist/adblock-content.js # built by CI (js job) or `cd js && npm run build`
+        buildPhase: resources
+    dependencies:
+      - package: SafariConverterLib
+        product: ContentBlockerConverter # also contains the FilterEngine module
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nullview.app
+        SWIFT_VERSION: "5.0" # avoid Swift 6 strict-concurrency errors; we can't compile locally
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGNING_ALLOWED: "NO"
+    info:
+      path: NullView/Info.plist
+      properties:
+        CFBundleDisplayName: NullView
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: com.nullview.app
+            CFBundleURLSchemes: [nullview]

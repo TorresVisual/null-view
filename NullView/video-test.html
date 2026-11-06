@@ -1,0 +1,19 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font:14px -apple-system;margin:8px}video{width:100%;background:#000}button{font-size:16px;padding:8px 14px}</style>
+<video id="v" playsinline src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"></video>
+<p><button id="play">Play / Pause</button> <button id="pip">PiP</button></p>
+<pre id="s"></pre>
+<script>
+const v = document.getElementById('v'), s = document.getElementById('s');
+const say = t => s.textContent += t + '\n';
+say('webkitSupportsPresentationMode(pip): ' + (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')));
+say('pictureInPictureEnabled: ' + document.pictureInPictureEnabled);
+v.addEventListener('webkitpresentationmodechanged', () => say('mode: ' + v.webkitPresentationMode));
+v.addEventListener('error', () => say('video error ' + (v.error && v.error.code)));
+document.getElementById('play').onclick = () => (v.paused ? v.play() : v.pause());
+document.getElementById('pip').onclick = () => {
+  try { v.webkitSetPresentationMode(v.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture'); }
+  catch (e) { say('pip error: ' + e); }
+};
+</script>

@@ -1,2 +1,6 @@
 .workspace.json
 .*.tmp
+NullView.xcodeproj
+NullView/Info.plist
+build
+SourcePackages

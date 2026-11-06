@@ -1,0 +1,54 @@
+# On-demand only. The macOS job bills at 10x, so it does the minimum: unsigned IPA.
+# Signing + install happen on the phone via AltStore. See CLAUDE.md "CI cost rule".
+name: build-ios
+on: workflow_dispatch
+
+concurrency:
+  group: build-ios
+  cancel-in-progress: true
+
+jobs:
+  js: # Linux: everything that doesn't need Apple frameworks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: js/package-lock.json }
+      - run: npm ci && npm run build
+        working-directory: js
+      - uses: actions/upload-artifact@v4
+        with: { name: js-dist, path: js/dist/adblock-content.js, retention-days: 1 }
+
+  ios:
+    needs: js
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - uses: actions/download-artifact@v4
+        with: { name: js-dist, path: js/dist }
+      - uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: spm-${{ hashFiles('project.yml') }}
+      - run: brew install xcodegen
+        env: { HOMEBREW_NO_AUTO_UPDATE: 1, HOMEBREW_NO_INSTALL_CLEANUP: 1 }
+      - run: xcodegen generate
+      - name: Build unsigned
+        run: >
+          xcodebuild -project NullView.xcodeproj -scheme NullView
+          -configuration Release -sdk iphoneos -destination 'generic/platform=iOS'
+          -derivedDataPath build -clonedSourcePackagesDirPath SourcePackages
+          -skipPackagePluginValidation
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          build
+      - name: Package IPA
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/NullView.app Payload/
+          zip -qr NullView.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with: { name: NullView-ipa, path: NullView.ipa, retention-days: 7 }
