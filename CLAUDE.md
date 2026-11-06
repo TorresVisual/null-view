@@ -5,7 +5,7 @@ iOS-only personal video browser (Swift, SwiftUI + WKWebView), sideloaded via Alt
 ## Start here
 
 1. Read `docs/decisions.md`. It is the source of truth and overrides `docs/brief.md`.
-2. Status: Phase 0 passed (`docs/phase0-results.md`). Phase 1 (browser foundation) passed on the phone on 2026-11-06 (built on the runner, six-point manual test). Phase 2 (content blocking: `NullView/Blocker.swift`, `BlockingViews.swift`, `Core/.../Blocking.swift`) passed the phone test on 2026-11-06. Current step: **Phase 3, video detection**. Phases 3 to 8 follow the brief, adjusted by `decisions.md`.
+2. Status: Phase 0 passed (`docs/phase0-results.md`). Phase 1 (browser foundation) passed on the phone on 2026-11-06 (built on the runner, six-point manual test). Phase 2 (content blocking: `NullView/Blocker.swift`, `BlockingViews.swift`, `Core/.../Blocking.swift`) passed the phone test on 2026-11-06. Current step: **Phase 3, video detection**. Phases 3 to 8 follow the brief, adjusted by `decisions.md`. Progress is tracked in GitHub Issues, one per phase (#1 to #3 closed, #4 Phase 3 to #9 Phase 8 open). Tick the task boxes as work lands and close the issue when the phone test passes. File new bugs and ideas with the `file-issue` skill.
 3. The Phase 0 spike (blocker, PiP and audio fixtures) was deleted in Phase 1 but lives in git history (commit `bdba6a0`). Phase 2 re-adds the blocker from there. `project.yml` still carries the AdGuard dependency and JS bundle for that.
 
 If a task would break a decision in `decisions.md` or fail an assumption in it, stop and ask the owner. Don't silently fall back to a weaker design (for example a home-grown blocker).

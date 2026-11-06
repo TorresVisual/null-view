@@ -113,4 +113,4 @@ Phase 0 is also the first test of the whole pipeline: XcodeGen, an unsigned IPA 
 
 ## Remaining phases
 
-After Phase 0 follow the brief's phases 1 to 8 (browser foundation, blocking, video detection, video experience, watching state, library, polish, testing), adjusted by this file. Phase 0 and the CI rules come first because the cost of a macOS run is high.
+After Phase 0 follow the brief's phases 1 to 8 (browser foundation, blocking, video detection, video experience, watching state, library, polish, testing), adjusted by this file. Status and task lists live in GitHub Issues, one per phase (#1 Phase 0 to #9 Phase 8, opened 2026-11-06). Update the issue, not this file, as tasks finish. Phase 0 and the CI rules come first because the cost of a macOS run is high.
