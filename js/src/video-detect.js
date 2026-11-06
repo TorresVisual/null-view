@@ -73,36 +73,56 @@
   // Own fullscreen: the video (or the <iframe> holding it) is pinned over the whole viewport, everything
   // else is hidden. Attributes mark the pinned element and its ancestors; a constructable stylesheet is
   // used because, unlike a <style> element, a page CSP cannot block it.
-  const CSS = `
+  // Shadow roots on the way up get the same rules (an outer stylesheet does not reach into them), and
+  // the hide rule matches every element there. Closed shadow roots cannot be searched (ponytail).
+  const BASE = `
     [data-nv-chain]{transform:none!important;filter:none!important;perspective:none!important;contain:none!important;
       backdrop-filter:none!important;will-change:auto!important;overflow:visible!important;z-index:auto!important}
-    html[data-nv-on] body *:not([data-nv-chain]):not([data-nv-target]){visibility:hidden!important}
     [data-nv-target]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;
       max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;
-      z-index:2147483647!important;background:#000!important;object-fit:contain!important;transform:none!important}
+      z-index:2147483647!important;background:#000!important;object-fit:contain!important;transform:none!important}`;
+  const HIDE = '*:not([data-nv-chain]):not([data-nv-target]){visibility:hidden!important}';
+  const HIDE_DOC = `html[data-nv-on] body ${HIDE}
     html[data-nv-on],html[data-nv-on] body{overflow:hidden!important;background:#000!important}`;
-  let sheet = null;
+  const sheets = new Map(); // document or shadow root -> our stylesheet
+  const marked = new Set(); // elements carrying our attributes (querySelectorAll cannot see into shadow roots)
+
+  function adopt(root, css) {
+    if (sheets.has(root)) return;
+    const s = new CSSStyleSheet();
+    s.replaceSync(BASE + css);
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, s];
+    sheets.set(root, s);
+  }
+
+  function mark(el, attr) { el.setAttribute(attr, ''); marked.add(el); }
 
   function expand(el) {
-    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) p.setAttribute('data-nv-chain', '');
-    el.setAttribute('data-nv-target', '');
-    document.documentElement.setAttribute('data-nv-on', '');
-    if (!sheet) {
-      sheet = new CSSStyleSheet();
-      sheet.replaceSync(CSS);
-      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    mark(el, 'data-nv-target');
+    for (let p = el; ;) {
+      const par = p.parentElement;
+      if (par === document.body) break;
+      if (par) { mark(par, 'data-nv-chain'); p = par; continue; }
+      const root = p.getRootNode();
+      if (!root.host) break;
+      adopt(root, HIDE);
+      mark(root.host, 'data-nv-chain');
+      p = root.host;
     }
+    document.documentElement.setAttribute('data-nv-on', '');
+    adopt(document, HIDE_DOC);
   }
 
   function collapse() {
-    document.querySelectorAll('[data-nv-chain],[data-nv-target]').forEach((e) => {
-      e.removeAttribute('data-nv-chain');
-      e.removeAttribute('data-nv-target');
-    });
+    marked.forEach((e) => { e.removeAttribute('data-nv-chain'); e.removeAttribute('data-nv-target'); });
+    marked.clear();
     document.documentElement.removeAttribute('data-nv-on');
-    if (sheet) document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== sheet);
-    sheet = null;
+    sheets.forEach((s, root) => { root.adoptedStyleSheets = root.adoptedStyleSheets.filter((x) => x !== s); });
+    sheets.clear();
   }
+
+  const framesIn = (root) => [...root.querySelectorAll('*')].flatMap((e) =>
+    [...(e.matches('iframe,frame') ? [e] : []), ...(e.shadowRoot ? framesIn(e.shadowRoot) : [])]);
 
   const up = (nv) => { if (parent !== window) parent.postMessage({ nv }, '*'); };
 
@@ -110,7 +130,7 @@
   addEventListener('message', (e) => {
     const nv = e.data?.nv;
     if (nv !== 'expand' && nv !== 'collapse') return;
-    const f = [...document.querySelectorAll('iframe,frame')].find((x) => x.contentWindow === e.source);
+    const f = framesIn(document).find((x) => x.contentWindow === e.source);
     if (!f) return;
     if (nv === 'expand') expand(f); else collapse();
     up(nv);

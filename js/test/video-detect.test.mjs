@@ -78,7 +78,7 @@ test('state changes are reported quickly, an unchanged state is not repeated', a
 });
 
 test('videos in iframes are reported by their own frame', async () => {
-  await load(`<iframe id=f width=400 height=300 srcdoc="<video id=in width=300 height=200 src='blob:z'></video>"></iframe>`);
+  await load(`<iframe id=f width=400 height=300 srcdoc="<video id=in width=300 height=200 src=blob:z></video>"></iframe>`);
   await settle(900);
   const frames = [...new Set(msgs.filter((m) => m.type === 'videos').map((m) => m.frame))];
   assert.equal(frames.length, 1);        // the top frame has no video; only the iframe reports
@@ -122,7 +122,7 @@ test('enter pins the video over the viewport, hides the rest, exit restores', as
 });
 
 test('a video in an iframe pins its iframe in the parent too', async () => {
-  await load(`<p id=other>other</p><iframe id=f width=400 height=300 srcdoc="<video id=in width=300 height=200 src='blob:z'></video>"></iframe>`);
+  await load(`<p id=other>other</p><iframe id=f width=400 height=300 srcdoc="<video id=in width=300 height=200 src=blob:z></video>"></iframe>`);
   await settle(600);
   await page.frames()[1].evaluate(() => __nvCmd(0, 'enter'));
   await settle(200);
@@ -131,6 +131,26 @@ test('a video in an iframe pins its iframe in the parent too', async () => {
   await page.frames()[1].evaluate(() => __nvCmd(0, 'exit'));
   await settle(200);
   assert.equal(await style('#f', 'position'), 'static');
+});
+
+test('an iframe inside a shadow root is pinned and the page around it hidden, header included', async () => {
+  await load(`<header id=hdr style="position:fixed;top:0;left:0;right:0;height:50px">logo</header><p id=other>other</p>
+    <div id=host></div><script>host.attachShadow({ mode: 'open' }).innerHTML =
+      '<nav id=nav>menu</nav><div id=wrap style="transform:translateX(3px)"><iframe id=f width=400 height=300 srcdoc="<video id=in width=300 height=200 src=blob:z></video>"></iframe></div>'</script>`);
+  await settle(600);
+  const sh = (sel, prop) => page.evaluate(([s, p]) => getComputedStyle(host.shadowRoot.querySelector(s))[p], [sel, prop]);
+  await page.frames()[1].evaluate(() => __nvCmd(0, 'enter'));
+  await settle(200);
+  assert.equal(await sh('#f', 'position'), 'fixed');
+  assert.equal(await sh('#wrap', 'transform'), 'none');
+  assert.equal(await sh('#nav', 'visibility'), 'hidden');
+  assert.equal(await style('#hdr', 'visibility'), 'hidden');
+  assert.equal(await style('#other', 'visibility'), 'hidden');
+  await page.frames()[1].evaluate(() => __nvCmd(0, 'exit'));
+  await settle(200);
+  assert.equal(await sh('#f', 'position'), 'static');
+  assert.equal(await sh('#nav', 'visibility'), 'visible');
+  assert.equal(await style('#hdr', 'visibility'), 'visible');
 });
 
 test('commands drive the element; position updates come fast in video mode', async () => {
