@@ -92,8 +92,18 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
-        w.evaluateJavaScript("[navigator.platform, navigator.maxTouchPoints, navigator.userAgent.slice(0, 50)].join(' | ')") { [weak self] r, _ in
-            MainActor.assumeIsolated { self?.note("spotify loaded \(w.url?.absoluteString.prefix(60) ?? "?") ua: \(r as? String ?? "?")") }
+        report(w, "loaded")
+        // Layout debugging: the viewport the page really got, now and once Spotify's scripts have settled.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self, weak w] in
+            MainActor.assumeIsolated { if let w { self?.report(w, "+3s") } }
+        }
+    }
+
+    private func report(_ w: WKWebView, _ tag: String) {
+        let sv = w.scrollView
+        let native = "native zoom=\(sv.zoomScale) min=\(sv.minimumZoomScale) max=\(sv.maximumZoomScale) content=\(Int(sv.contentSize.width))x\(Int(sv.contentSize.height)) view=\(Int(w.bounds.width))x\(Int(w.bounds.height))"
+        w.evaluateJavaScript("[navigator.platform, navigator.maxTouchPoints, 'inner ' + innerWidth + 'x' + innerHeight, 'scale ' + (visualViewport ? visualViewport.scale : '?'), 'doc ' + document.documentElement.scrollWidth + 'x' + document.documentElement.scrollHeight, 'meta ' + (document.querySelector('meta[name=viewport]')?.content ?? 'none')].join(' | ')") { [weak self] r, _ in
+            MainActor.assumeIsolated { self?.note("spotify \(tag) \(w.url?.path.prefix(30) ?? "?") \(native) js: \(r as? String ?? "?")") }
         }
     }
 
