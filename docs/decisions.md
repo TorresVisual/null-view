@@ -105,7 +105,7 @@ Phase 0 is also the first test of the whole pipeline: XcodeGen, an unsigned IPA 
 
 ## Unverified assumptions (check early, don't trust)
 
-- Public-repo macOS runners are free (billing).
+- ~~Public-repo macOS runners are free (billing).~~ **Confirmed 2026-11-06:** the owner checked GitHub billing and the runs don't appear. The CI rules in `CLAUDE.md` still apply, now to save wall-clock time and runner queue/limits rather than money. If the repo ever goes private, the 10x cost applies again.
 - AltStore's handling of the free-account app-ID limit, and whether a URL scheme needs nothing extra.
 - That `MPVolumeView` volume control still works on iOS 26.
 - ~~That the AdGuard converter builds with the Swift toolchain on Windows.~~ **Checked 2026-11-06 (Swift 6.4.2, v4.3.1): partly.** The `ContentBlockerConverter` module (list text to Safari JSON) compiles on Windows. The `FilterEngine` module (`WebExtension`, cosmetic/scriptlet lookup) does **not**, because it uses POSIX `flock`. So the pure-Swift package may depend on `ContentBlockerConverter` but must keep `FilterEngine` behind a protocol and out of Windows tests. Windows build quirks: clone with `core.autocrlf=false` (the version plugin fails on CRLF), and the plugin needs `/usr/bin/true` with the native build system (we stubbed it in a throwaway clone). The plain `swift build` default build system fails to find MSVC headers in this shell.
