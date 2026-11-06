@@ -7,7 +7,7 @@ import WebKit
 /// Shares cookies with the main browser (default data store). No content blocker here: Spotify's
 /// ads are inserted into the audio stream, so the blocker cannot remove them anyway.
 @MainActor
-final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
+final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate {
     nonisolated static func isSpotify(_ url: URL) -> Bool {
         guard let h = url.host?.lowercased() else { return false }
         return h == "spotify.com" || h.hasSuffix(".spotify.com")
@@ -50,6 +50,43 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
         return true
     }
 
+    /// Hooks the web player: remembers the lock-screen handlers it registers (media session) and exposes
+    /// cmd/state. Buttons are found by Spotify's `data-testid`s, the media-session handler is the fallback.
+    /// FRAGILE: both depend on Spotify's page; a miss shows up as "no hook" or "none" in the log.
+    private static let playerHook = """
+        (() => {
+          const handlers = {};
+          if (window.MediaSession) {
+            const orig = MediaSession.prototype.setActionHandler;
+            MediaSession.prototype.setActionHandler = function (a, f) { handlers[a] = f; return orig.call(this, a, f); };
+          }
+          const ids = { playpause: 'control-button-playpause', nexttrack: 'control-button-skip-forward', previoustrack: 'control-button-skip-back' };
+          const button = a => document.querySelector(`[data-testid="${ids[a]}"]`);
+          window.__nv = {
+            cmd(a) {
+              const b = button(a);
+              if (b) { b.click(); return 'button'; }
+              const ms = navigator.mediaSession;
+              const name = a === 'playpause' ? (ms.playbackState === 'playing' ? 'pause' : 'play') : a;
+              if (handlers[name]) { handlers[name](); return 'handler ' + name; }
+              return 'none';
+            },
+            state() {
+              const b = button('playpause'), md = navigator.mediaSession.metadata;
+              return JSON.stringify({
+                playing: navigator.mediaSession.playbackState === 'playing' || /pause/i.test(b ? b.getAttribute('aria-label') || '' : ''),
+                title: (md && md.title) || document.title || ''
+              });
+            }
+          };
+        })();
+        """
+
+    @Published private(set) var playing = false
+    @Published private(set) var title = ""
+    @Published private(set) var canGoBack = false
+    @Published private(set) var canGoForward = false
+
     let webView: WKWebView
     private let note: (String) -> Void
     private var requested: URL?
@@ -61,6 +98,7 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
         cfg.mediaTypesRequiringUserActionForPlayback = []
         // Not .desktop: the log showed it never took effect (platform stayed iPhone); the Mac UA alone is what Spotify reads.
         cfg.userContentController.addUserScript(WKUserScript(source: Self.fitViewport, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        cfg.userContentController.addUserScript(WKUserScript(source: Self.playerHook, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         // Track changes are driven by page timers; a page that thinks it is hidden gets them throttled,
         // which stalls the hop to the next track (locked screen, closed overlay).
         cfg.userContentController.addUserScript(WKUserScript(source: Self.alwaysVisible, injectionTime: .atDocumentStart, forMainFrameOnly: false))
@@ -92,19 +130,29 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
         return ["http", "https", "about", "blob"].contains(scheme) ? .allow : .cancel
     }
 
-    func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
-        report(w, "loaded")
-        // Layout debugging: the viewport the page really got, now and once Spotify's scripts have settled.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self, weak w] in
-            MainActor.assumeIsolated { if let w { self?.report(w, "+3s") } }
+    // MARK: Controls
+
+    /// "playpause", "nexttrack" or "previoustrack". Logged with the path taken, so a broken hook shows in the log.
+    func send(_ action: String) {
+        webView.evaluateJavaScript("window.__nv ? window.__nv.cmd('\(action)') : 'no hook'") { [weak self] r, _ in
+            MainActor.assumeIsolated {
+                self?.note("spotify \(action) -> \(r as? String ?? "?")")
+                self?.refresh()
+            }
         }
     }
 
-    private func report(_ w: WKWebView, _ tag: String) {
-        let sv = w.scrollView
-        let native = "native zoom=\(sv.zoomScale) min=\(sv.minimumZoomScale) max=\(sv.maximumZoomScale) content=\(Int(sv.contentSize.width))x\(Int(sv.contentSize.height)) view=\(Int(w.bounds.width))x\(Int(w.bounds.height))"
-        w.evaluateJavaScript("[navigator.platform, navigator.maxTouchPoints, 'inner ' + innerWidth + 'x' + innerHeight, 'scale ' + (visualViewport ? visualViewport.scale : '?'), 'doc ' + document.documentElement.scrollWidth + 'x' + document.documentElement.scrollHeight, 'meta ' + (document.querySelector('meta[name=viewport]')?.content ?? 'none')].join(' | ')") { [weak self] r, _ in
-            MainActor.assumeIsolated { self?.note("spotify \(tag) \(w.url?.path.prefix(30) ?? "?") \(native) js: \(r as? String ?? "?")") }
+    /// Reads play state and chapter title back from the page. Called every second while the overlay is shown.
+    func refresh() {
+        canGoBack = webView.canGoBack
+        canGoForward = webView.canGoForward
+        webView.evaluateJavaScript("window.__nv ? window.__nv.state() : ''") { [weak self] r, _ in
+            MainActor.assumeIsolated {
+                guard let self, let s = r as? String, let d = s.data(using: .utf8),
+                      let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return }
+                playing = o["playing"] as? Bool ?? false
+                title = o["title"] as? String ?? ""
+            }
         }
     }
 
@@ -118,8 +166,9 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
 /// Always in the view tree, shown or faded out: a web view removed from the window stops running the
 /// page's timers, so closing a sheet stopped playback at the end of the current track.
 struct SpotifyOverlay: View {
-    let player: SpotifyPlayer
+    @ObservedObject var player: SpotifyPlayer
     @Binding var show: Bool
+    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -131,10 +180,41 @@ struct SpotifyOverlay: View {
             .padding(.horizontal, 16)
             .background(.bar)
             WebViewHost(webView: player.webView)
+            controls
         }
         .background(Color.black.ignoresSafeArea())
         .opacity(show ? 1 : 0)
         .allowsHitTesting(show)
         .accessibilityHidden(!show)
+        .onReceive(tick) { _ in if show { player.refresh() } }
+        .onChange(of: show) { _, now in if now { player.refresh() } }
+    }
+
+    /// The page's own controls are tiny at the fitted zoom, so these drive the player from outside.
+    private var controls: some View {
+        VStack(spacing: 0) {
+            Text(player.title).font(.caption).lineLimit(1).foregroundStyle(.secondary)
+                .padding(.horizontal, 16).padding(.top, 6)
+            HStack {
+                button("chevron.backward", "Page back") { player.webView.goBack(); player.refresh() }.disabled(!player.canGoBack)
+                Spacer()
+                button("backward.fill", "Previous track") { player.send("previoustrack") }
+                Spacer()
+                button(player.playing ? "pause.fill" : "play.fill", player.playing ? "Pause" : "Play") { player.send("playpause") }
+                    .font(.title)
+                Spacer()
+                button("forward.fill", "Next track") { player.send("nexttrack") }
+                Spacer()
+                button("chevron.forward", "Page forward") { player.webView.goForward(); player.refresh() }.disabled(!player.canGoForward)
+            }
+            .font(.title3)
+            .padding(.horizontal, 16)
+        }
+        .background(.bar)
+    }
+
+    private func button(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).frame(minWidth: 44, minHeight: 44) }
+            .accessibilityLabel(label)
     }
 }

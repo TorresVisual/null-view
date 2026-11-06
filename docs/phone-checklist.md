@@ -37,7 +37,8 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 
 ## Spotify
 - [ ] Open `https://open.spotify.com/album/6UN8m07SmIzyDe63H0oljL` after visiting YouTube: the Spotify overlay opens fitted to the screen (sidebar, main area, right panel), pinch zooms in only. Log in with the free account.
-- [ ] Play the album: tracks go in order, the next one starts by itself, with and without the screen locked. Settings log shows `private pref ... applied` and `native zoom=0.2`.
+- [ ] Play the album: tracks go in order, the next one starts by itself, with and without the screen locked. Settings log shows `private pref ... applied`.
+- [ ] Bottom bar: play/pause, previous and next drive the player, the icon and chapter title follow it. Page back/forward move through the Spotify view's own history. If one does nothing, the log line `spotify <action> -> none` or `no hook` says why.
 - [ ] Done stops playback; opening the link again does not reload the page.
 
 ## Sharing
