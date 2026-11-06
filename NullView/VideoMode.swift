@@ -14,6 +14,7 @@ final class VideoMode: ObservableObject {
     /// The pinned video's latest report. nil while not in video mode.
     @Published private(set) var video: VideoEntry?
     @Published private(set) var hud: String?
+    @Published private(set) var hudLevel: HUDLevel?
 
     private let detector: VideoDetector
     private let webView: WKWebView
@@ -142,12 +143,18 @@ final class VideoMode: ObservableObject {
         }
     }
 
-    func flash(_ text: String) {
+    func flash(_ text: String) { show(text, nil) }
+
+    /// Brightness or volume while dragging: a filled bar instead of text. `value` is 0 to 1.
+    func flash(level: HUDLevel) { show(nil, level) }
+
+    private func show(_ text: String?, _ level: HUDLevel?) {
         hud = text
+        hudLevel = level
         hudTask?.cancel()
         hudTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(0.9))
-            if !Task.isCancelled { self?.hud = nil }
+            if !Task.isCancelled { self?.hud = nil; self?.hudLevel = nil }
         }
     }
 
@@ -159,6 +166,10 @@ final class VideoMode: ObservableObject {
             Task { @MainActor in self?.detector.note("rotate failed: \(e.localizedDescription)") }
         }
     }
+}
+
+struct HUDLevel: Equatable {
+    let symbol: String, label: String, value: Double
 }
 
 /// System volume through a hidden `MPVolumeView` slider.
@@ -194,6 +205,7 @@ struct VideoModeView: View {
                 Text(hud).font(.title3.monospacedDigit().bold()).padding(.horizontal, 16).padding(.vertical, 10)
                     .background(.regularMaterial, in: Capsule()).allowsHitTesting(false)
             }
+            if let l = mode.hudLevel { levelBar(l) }
         }
         .environment(\.colorScheme, .dark)
         .onChange(of: mode.video?.pos) { _, p in if !scrubbing { scrub = p ?? 0 } }
@@ -234,6 +246,23 @@ struct VideoModeView: View {
         } else if mode.video?.live == true {
             Text("LIVE").font(.footnote.bold())
         }
+    }
+
+    private func levelBar(_ l: HUDLevel) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: l.symbol).font(.title3)
+            ZStack(alignment: .bottom) {
+                Capsule().fill(.white.opacity(0.25))
+                Capsule().fill(.white).frame(height: 120 * min(max(l.value, 0), 1))
+            }
+            .frame(width: 6, height: 120)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .background(.regularMaterial, in: Capsule())
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(l.label)
+        .accessibilityValue("\(Int(l.value * 100)) percent")
     }
 
     private func circleButton(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
@@ -308,9 +337,11 @@ final class SurfaceView: UIView {
                 let v = VideoGestures.level(start: startLevel, dy: t.y, height: bounds.height)
                 if onLeft {
                     mode.screen.brightness = CGFloat(v)
-                    mode.flash("Brightness \(Int(v * 100))%")
+                    mode.flash(level: HUDLevel(symbol: "sun.max.fill", label: "Brightness", value: v))
+                } else if mode.volume.set(v) {
+                    mode.flash(level: HUDLevel(symbol: "speaker.wave.2.fill", label: "Volume", value: v))
                 } else {
-                    mode.flash(mode.volume.set(v) ? "Volume \(Int(v * 100))%" : "Volume control unavailable")
+                    mode.flash("Volume control unavailable")
                 }
             default: break
             }
