@@ -150,8 +150,8 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
             MainActor.assumeIsolated {
                 guard let self, let s = r as? String, let d = s.data(using: .utf8),
                       let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return }
-                playing = o["playing"] as? Bool ?? false
-                title = o["title"] as? String ?? ""
+                self.playing = o["playing"] as? Bool ?? false
+                self.title = o["title"] as? String ?? ""
             }
         }
     }
