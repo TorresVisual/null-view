@@ -35,6 +35,11 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] Open a second site twice: it moves in front of the first. Long-press a tile, Remove: it is gone.
 - [ ] The Sites button in the bottom toolbar opens the same grid as a sheet; tapping a tile closes it and loads the site.
 
+## Spotify
+- [ ] Open `https://open.spotify.com/album/6UN8m07SmIzyDe63H0oljL` after visiting YouTube: the Spotify overlay opens fitted to the screen (sidebar, main area, right panel), pinch zooms in only. Log in with the free account.
+- [ ] Play the album: tracks go in order, the next one starts by itself, with and without the screen locked. Settings log shows `private pref ... applied` and `native zoom=0.2`.
+- [ ] Done stops playback; opening the link again does not reload the page.
+
 ## Sharing
 - [ ] The Shortcut from Settings > Sharing opens a shared link in the app.
 - [ ] Copy a link, reopen the app: "Link on clipboard" banner, Open loads it.

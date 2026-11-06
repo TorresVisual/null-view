@@ -52,6 +52,13 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 - **PiP and background playback are in the MVP** (audio background mode, audio session, media session, now-playing info).
 - Autoplay without a tap is allowed (`mediaTypesRequiringUserActionForPlayback = []`), so the queue can auto-advance.
 
+## Spotify (decided 2026-11-06, an exception to "DRM sites are out")
+
+- Why: the free Spotify phone app only plays albums shuffled. The owner listens to audiobooks split into chapters, which need album order. Spotify's desktop web player plays in order.
+- What: `spotify.com` links (address bar, Sites, deep links, clipboard) open in a **dedicated second WebView** (`NullView/SpotifyView.swift`), shown as an overlay with a Done button. Done stops playback (accepted). It shares cookies with the main browser. It is **not** video mode: no detection, queue or library, and the content blocker is off there.
+- How it works (all found on the phone, see the commits for the dead ends): a fixed Mac user agent set when the view is created. Setting it per navigation on the shared view failed after visiting another site. A viewport tag forced to a 1950 CSS px layout, fitted to the screen and zoomable in only (`screen.width` read the phone's height, so the script uses the shorter side). A page-visibility override plus two private WebKit preferences (hidden-page timer throttling and process suppression, **fragile, guarded with `responds(to:)`**) so the page keeps starting the next track while locked. The `app.link` hop of Spotify's "open in the app" bounce is cancelled.
+- Known limits: a short gap between tracks (better than before, never as clean as the PC). **Ads are not blocked**: they are audio inserted server-side, so no content rule can touch them, and none showed up in testing so far. Nothing is guaranteed if Spotify changes its web player.
+
 ## JS bridge and security
 
 - Injected scripts that talk to native (video detection, controls, the message bridge) run in an **isolated `WKContentWorld`**, in all frames.

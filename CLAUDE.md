@@ -14,7 +14,7 @@ If a task would break a decision in `decisions.md` or fail an assumption in it, 
 
 - `project.yml`: XcodeGen spec. The `.xcodeproj` and `Info.plist` are generated and git-ignored.
 - `Core/`: pure-Swift package `NullViewCore` (address-bar resolution, deep links). Tests: `swift test --build-system native` in `Core/`, via the vcvars batch below.
-- `NullView/`: the app target (Apple frameworks allowed). `BrowserModel` owns the WebView, `BrowserView` and `SettingsView` are the UI.
+- `NullView/`: the app target (Apple frameworks allowed). `BrowserModel` owns the WebView, `BrowserView` and `SettingsView` are the UI. `SpotifyView.swift` is a second, dedicated WebView for `spotify.com` links (decisions.md "Spotify"; an exception to the DRM rule).
 - `js/`: npm project that bundles AdGuard's cosmetic/scriptlet script to `js/dist/adblock-content.js`. Built on Linux in CI, git-ignored. `npm test` runs the Playwright WebKit tests offline. `npm run corpus` smoke-tests live sites (needs network, results go in `docs/incompatible-sites.md`).
 - `.github/workflows/build-ios.yml`: manual-trigger build of the unsigned IPA.
 
