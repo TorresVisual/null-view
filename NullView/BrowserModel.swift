@@ -144,14 +144,15 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         }
         guard let scheme = action.request.url?.scheme?.lowercased() else { return .allow }
         if action.targetFrame?.isMainFrame == true, scheme == "http" || scheme == "https" {
-            // iOS hands tapped links to the domain's installed app (Universal Links, e.g. x.com).
-            // Only link taps trigger it, so cancel the tap and load the URL ourselves (issue #10).
-            // The reload has navigationType .other, so it comes back through here and is allowed.
-            if action.navigationType == .linkActivated {
-                w.load(action.request)
-                return .cancel
-            }
             blocker.apply(for: action.request.url)
+            // iOS hands tapped links to the domain's installed app (Universal Links, e.g. x.com).
+            // WebKit's private "allow without trying app link" policy (Allow + 2, in
+            // WKNavigationDelegatePrivate.h) keeps the tap in this view. Cancel + manual load does
+            // not work: the cancel also kills the load started inside the callback (issue #10).
+            if action.navigationType == .linkActivated {
+                let noAppLink: WKNavigationActionPolicy? = WKNavigationActionPolicy(rawValue: WKNavigationActionPolicy.allow.rawValue + 2)
+                return noAppLink ?? .allow
+            }
         }
         switch scheme {
         case "http", "https", "about", "blob": return .allow
