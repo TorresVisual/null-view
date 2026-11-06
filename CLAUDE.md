@@ -5,7 +5,7 @@ iOS-only personal video browser (Swift, SwiftUI + WKWebView), sideloaded via Alt
 ## Start here
 
 1. Read `docs/decisions.md`. It is the source of truth and overrides `docs/brief.md`.
-2. Status: Phase 0 passed (`docs/phase0-results.md`). Phase 1 (browser foundation) is written and waiting for its first runner build and phone test. Phases 2 to 8 follow the brief, adjusted by `decisions.md`.
+2. Status: Phase 0 passed (`docs/phase0-results.md`). Phase 1 (browser foundation) passed on the phone on 2026-11-06 (built on the runner, six-point manual test). Current step: **Phase 2, content blocking**. Phases 3 to 8 follow the brief, adjusted by `decisions.md`.
 3. The Phase 0 spike (blocker, PiP and audio fixtures) was deleted in Phase 1 but lives in git history (commit `bdba6a0`). Phase 2 re-adds the blocker from there. `project.yml` still carries the AdGuard dependency and JS bundle for that.
 
 If a task would break a decision in `decisions.md` or fail an assumption in it, stop and ask the owner. Don't silently fall back to a weaker design (for example a home-grown blocker).
