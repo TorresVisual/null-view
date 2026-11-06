@@ -27,6 +27,12 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     nonisolated static let lastURLKey = "lastURL"
     /// Spotify spike: load pages as the desktop site (its web player plays albums in order; the phone app shuffles).
     nonisolated static let desktopSiteKey = "desktopSite"
+    /// Content mode alone was ignored on back/forward and redirected loads (the log showed an iPhone UA), so also pin the UA.
+    private static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
+
+    func applyDesktopSite() {
+        webView.customUserAgent = UserDefaults.standard.bool(forKey: Self.desktopSiteKey) ? Self.desktopUA : nil
+    }
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
@@ -66,6 +72,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
         webView.isInspectable = true
+        applyDesktopSite()
 
         let w = webView
         Publishers.MergeMany([
@@ -189,7 +196,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         if let u = w.url { watch.library.visit(u, title: w.title ?? "") }
         // Spotify spike: does this WebView expose encrypted-media APIs, and which UA did the page get?
         if w.url?.host?.hasSuffix("spotify.com") == true {
-            w.evaluateJavaScript("[typeof navigator.requestMediaKeySystemAccess, typeof window.WebKitMediaKeys, navigator.userAgent.slice(0, 90)].join(' | ')") { [weak self] r, _ in
+            w.evaluateJavaScript("[typeof navigator.requestMediaKeySystemAccess, typeof window.WebKitMediaKeys, navigator.platform, navigator.maxTouchPoints, navigator.userAgent.slice(0, 70)].join(' | ')") { [weak self] r, _ in
                 MainActor.assumeIsolated { self?.detector.note("spotify eme: \(r as? String ?? "js failed")") }
             }
         }

@@ -51,7 +51,7 @@ struct SettingsView: View {
                     Text("Nothing leaves this device except the pages you open.")
                 }
             }
-            .onChange(of: desktopSite) { model.reload() }
+            .onChange(of: desktopSite) { model.applyDesktopSite(); model.reload() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
