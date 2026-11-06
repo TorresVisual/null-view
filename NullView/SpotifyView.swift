@@ -27,7 +27,7 @@ final class SpotifyPlayer: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// replace it (and re-replace when the page rewrites it). Tune W if the layout still overflows or is too small.
     private static let fitViewport = """
         (() => {
-          const W = 900, content = `width=${W}, initial-scale=${(screen.width / W).toFixed(3)}, minimum-scale=0.2, maximum-scale=4, user-scalable=yes`;
+          const W = 900, s = (screen.width / W).toFixed(3), content = `width=${W}, initial-scale=${s}, minimum-scale=${s}, maximum-scale=4, user-scalable=yes`;
           const fix = () => {
             let ms = document.querySelectorAll('meta[name=viewport]');
             if (!ms.length && document.head) { const m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); ms = [m]; }
