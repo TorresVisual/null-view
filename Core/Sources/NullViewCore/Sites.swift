@@ -7,6 +7,13 @@ public struct SavedSite: Equatable {
     public var opens: Int
     public var lastOpened: Date
 
+    /// The site's own `/favicon.ico`. No third-party icon service, so no host list leaves the device.
+    public var iconURL: URL? {
+        guard let u = URL(string: url), let scheme = u.scheme, let host = u.host else { return nil }
+        let port = u.port.map { ":\($0)" } ?? ""
+        return URL(string: "\(scheme)://\(host)\(port)/favicon.ico")
+    }
+
     public init(url: String, name: String, opens: Int = 0, lastOpened: Date = .distantPast) {
         self.url = url; self.name = name; self.opens = opens; self.lastOpened = lastOpened
     }

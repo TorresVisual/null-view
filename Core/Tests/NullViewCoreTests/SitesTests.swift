@@ -29,6 +29,13 @@ final class SitesTests: XCTestCase {
         XCTAssertEqual(s.ordered().first?.opens, 2)
     }
 
+    func testIconURLIsSiteRoot() {
+        XCTAssertEqual(SavedSite(url: "https://www.reddit.com/r/swift?x=1", name: "R").iconURL?.absoluteString,
+                       "https://www.reddit.com/favicon.ico")
+        XCTAssertEqual(SavedSite(url: "http://host.lan:8080/a", name: "H").iconURL?.absoluteString,
+                       "http://host.lan:8080/favicon.ico")
+    }
+
     func testRemove() {
         let s = Sites(store: MemorySiteStore())
         let a = s.add("a.com")!

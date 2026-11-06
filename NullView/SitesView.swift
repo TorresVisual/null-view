@@ -57,10 +57,18 @@ struct SitesGrid: View {
 
     private func tile(_ site: SavedSite) -> some View {
         VStack(spacing: 6) {
-            Text(site.name.first.map { String($0).uppercased() } ?? "?")
-                .font(.title2.weight(.semibold)).frame(width: 56, height: 56)
-                .background(.tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
-                .accessibilityHidden(true)
+            AsyncImage(url: site.iconURL) { phase in
+                if let img = phase.image {
+                    img.resizable().scaledToFit().padding(12)
+                } else {
+                    // No icon (still loading, 404, or a format UIKit can't decode): first letter.
+                    Text(site.name.first.map { String($0).uppercased() } ?? "?").font(.title2.weight(.semibold))
+                }
+            }
+            .frame(width: 56, height: 56)
+            .background(.tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .accessibilityHidden(true)
             Text(site.name).font(.caption).lineLimit(1).foregroundStyle(.primary)
         }
         .frame(minHeight: 44)

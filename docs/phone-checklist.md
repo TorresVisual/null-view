@@ -30,6 +30,7 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 
 ## Sites
 - [ ] Blank start page shows "Add site". Add youtube.com: a tile appears; "cute cats" is rejected.
+- [ ] Tiles show the site's icon (a letter if the site has none).
 - [ ] Tap the tile: the site loads. Force-quit and reopen: the tile is still there.
 - [ ] Open a second site twice: it moves in front of the first. Long-press a tile, Remove: it is gone.
 - [ ] The Sites button in the bottom toolbar opens the same grid as a sheet; tapping a tile closes it and loads the site.
