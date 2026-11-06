@@ -40,7 +40,10 @@ struct BrowserView: View {
         .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker, detector: detector) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }
-        .onChange(of: scenePhase) { _, p in if p == .active { checkClipboard() } }
+        .onChange(of: scenePhase) { _, p in
+            detector.note("app \(p)")
+            if p == .active { checkClipboard() }
+        }
         .onAppear { checkClipboard() }
         .task { await blocker.start() }
     }

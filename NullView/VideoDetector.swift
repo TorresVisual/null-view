@@ -115,5 +115,5 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
         if log.count > 200 { log.removeFirst(log.count - 200) }
     }
 
-    var logText: String { log.suffix(40).joined(separator: "\n") }
+    var logText: String { log.suffix(15).joined(separator: "\n") }
 }

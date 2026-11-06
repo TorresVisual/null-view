@@ -9,6 +9,8 @@ struct NullViewApp: App {
     init() {
         // .playback lets video audio play with the silent switch on and in the background.
         try? AVAudioSession.sharedInstance().setCategory(.playback)
+        // Phase 0 (where background audio passed) also activated the session up front; Phase 1 dropped that.
+        try? AVAudioSession.sharedInstance().setActive(true)
     }
 
     var body: some Scene {
