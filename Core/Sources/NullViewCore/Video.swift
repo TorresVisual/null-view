@@ -34,14 +34,18 @@ public enum VideoMessage: Equatable {
     case gone(frame: String)
     /// The page asked for fullscreen on this video (its own fullscreen button): enter video mode.
     case fullscreen(frame: String, index: Int)
+    /// Diagnostic lines about failed, slow or ad-looking page requests (video log only; never acted on).
+    case net(frame: String, lines: [String])
 
     public static let maxVideosPerFrame = 50
+    public static let maxNetLines = 40
 
     private struct Raw: Decodable {
         let type: String
         let frame: String
         let videos: [VideoEntry]?
         let i: Int?
+        let lines: [String]?
     }
 
     public static func parse(_ json: String) -> VideoMessage? {
@@ -52,6 +56,9 @@ public enum VideoMessage: Equatable {
         case "fullscreen":
             guard let i = raw.i, i >= 0, i < maxVideosPerFrame else { return nil }
             return .fullscreen(frame: raw.frame, index: i)
+        case "net":
+            guard let l = raw.lines, l.count <= maxNetLines, l.allSatisfy({ $0.count <= 200 }) else { return nil }
+            return .net(frame: raw.frame, lines: l)
         case "videos":
             guard let v = raw.videos, v.count <= maxVideosPerFrame, v.allSatisfy(\.isSane) else { return nil }
             return .videos(frame: raw.frame, v)
@@ -94,7 +101,7 @@ public struct VideoTracker: Equatable {
             else { frames.append(Frame(key: key, isMain: isMainFrame, videos: videos)) }
         case let .gone(key):
             frames.removeAll { $0.key == key }
-        case .fullscreen: break
+        case .fullscreen, .net: break
         }
     }
 

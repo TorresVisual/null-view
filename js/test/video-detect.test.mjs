@@ -233,3 +233,20 @@ test('the page never sees itself hidden, so sites do not pause on background', a
   });
   assert.deepEqual(r, [0, false, 'visible']);
 });
+
+test('diagnostic: ad-looking and failed fetch/XHR calls are forwarded as net lines, ordinary ones are not', async () => {
+  await load('<video id=a width=640 height=360 src="blob:x"></video>');
+  await settle(300);
+  await page.evaluate(async () => {
+    await fetch('/v1/ad-pod/abc').catch(() => {});                       // ad-looking
+    await fetch('/plain/page').catch(() => {});                          // ordinary: not logged
+    await fetch('http://nv-down.invalid/x').catch(() => {});             // fails
+    await new Promise((r) => { const x = new XMLHttpRequest(); x.open('GET', '/ima3/thing'); x.onloadend = r; x.send(); });
+  });
+  await settle(2200);
+  const lines = msgs.filter((m) => m.type === 'net').flatMap((m) => m.lines);
+  assert.ok(lines.some((l) => l.includes('GET nv.test/v1/ad-pod/abc 200')), JSON.stringify(lines));
+  assert.ok(lines.some((l) => l.includes('nv-down.invalid') && l.includes('ERR')), JSON.stringify(lines));
+  assert.ok(lines.some((l) => l.includes('nv.test/ima3/thing')), JSON.stringify(lines));
+  assert.ok(!lines.some((l) => l.includes('/plain/page')));
+});

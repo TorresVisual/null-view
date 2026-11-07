@@ -41,3 +41,5 @@ joyn.at#%#//scriptlet('prevent-fetch', 'zomap.de')
 ```
 
 If the title then starts at once, turn lists back on one at a time to find which one stalls the player. If an exception is needed, the fix is to append the custom `@@` lines to every list before it is converted (not built).
+
+Result of the bisect (2026-11-07): with only those two rules some plays start at once and some still stall about 40 s, so a blocked host alone is not the whole story. A network diagnostic was added: on a page with a video, the video log (Settings, Copy log) now gets `net` lines for fetch/XHR calls that failed, were still pending after 5 s, took over 3 s or look like ads (`ad-pod`, `ima3`, `gampad`, `sqrt-`, `zomap`, `adition`, `71i.de`, `ioam`, `doubleclick`, `hybrid-prd`, ...). Format: `net +12.3s GET host/path result ms` (`ERR` = failed, `pending>5s` = no answer yet). Fetch and XHR only: not workers, scripts or images. To read it: reproduce a stall, copy the log straight after, and compare with a play that starts at once.

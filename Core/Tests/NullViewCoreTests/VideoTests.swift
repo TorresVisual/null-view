@@ -123,6 +123,16 @@ final class VideoGestureTests: XCTestCase {
         XCTAssertEqual(VideoGestures.clock(3723), "1:02:03")
     }
 
+    func testNetDiagnosticMessage() {
+        XCTAssertEqual(VideoMessage.parse(#"{"type":"net","frame":"a","lines":["+1.0s GET h/x ERR 5ms"]}"#),
+                       .net(frame: "a", lines: ["+1.0s GET h/x ERR 5ms"]))
+        XCTAssertNil(VideoMessage.parse(#"{"type":"net","frame":"a"}"#))
+        let long = String(repeating: "x", count: 201)
+        XCTAssertNil(VideoMessage.parse(#"{"type":"net","frame":"a","lines":["\#(long)"]}"#))
+        let many = Array(repeating: "\"x\"", count: 41).joined(separator: ",")
+        XCTAssertNil(VideoMessage.parse(#"{"type":"net","frame":"a","lines":[\#(many)]}"#))
+    }
+
     func testFullscreenMessageAndFrameLookup() {
         XCTAssertEqual(VideoMessage.parse(#"{"type":"fullscreen","frame":"a","i":2}"#), .fullscreen(frame: "a", index: 2))
         XCTAssertNil(VideoMessage.parse(#"{"type":"fullscreen","frame":"a"}"#))

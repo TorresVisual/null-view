@@ -27,6 +27,7 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
     private var frames: [String: WKFrameInfo] = [:]
     private(set) var log: [String] = []
     private var pageURL: URL?
+    private var netSeen = Set<String>()  // diagnostic lines already logged for this page
     private var lastLogKey = ""
     private var lastLogTime = Date.distantPast
 
@@ -54,6 +55,7 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
     func reset() {
         tracker.reset()
         frames = [:]
+        netSeen = []
         publish()
     }
 
@@ -68,6 +70,9 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
         case let .fullscreen(frame, index):
             note("page asked for fullscreen (video \(index) in \(frame.prefix(4)))")
             onFullscreen?(frame, index)
+            return
+        case let .net(_, lines):
+            for l in lines where netSeen.insert(l).inserted { note("net \(l)") }
             return
         }
         tracker.apply(msg, isMainFrame: message.frameInfo.isMainFrame)

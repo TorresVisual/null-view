@@ -9,7 +9,7 @@
   const frame = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const EVENTS = ['play', 'playing', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'emptied', 'resize', 'ratechange', 'webkitpresentationmodechanged'];
   const watched = new WeakSet();
-  let timer = 0, due = 0, last = '', everHadVideos = false, fast = false; // fast: video mode wants 4 position updates/s
+  let lastNet = '', timer = 0, due = 0, last = '', everHadVideos = false, fast = false; // fast: video mode wants 4 position updates/s
 
   const post = (m) => window.webkit?.messageHandlers?.nvVideo?.postMessage(JSON.stringify(m)); // native takes a JSON string
   // Every <video> under root, including those inside open shadow roots, in a stable order (light DOM first).
@@ -60,6 +60,12 @@
     });
     if (!vids.length && !everHadVideos) return;
     everHadVideos = true;
+    // Network diagnostic written by fullscreen-hook.js (page world); forwarded only on pages with a video.
+    const net = document.documentElement.getAttribute('data-nv-net');
+    if (net && net !== lastNet) {
+      lastNet = net;
+      try { const lines = JSON.parse(net); if (Array.isArray(lines)) post({ type: 'net', frame, lines: lines.map(String) }); } catch (e) { /* forged or cut */ }
+    }
     const videos = vids.slice(0, 50).map(describe);
     const msg = { type: 'videos', frame, videos };
     const json = JSON.stringify(msg);
