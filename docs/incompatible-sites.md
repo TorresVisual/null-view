@@ -8,7 +8,7 @@ Where video mode cannot engage and the app behaves as a plain browser (decisions
 | Joyn (joyn.at) | DRM video in web-component players (`<video>` inside shadow roots): video mode works since the shadow-root fix. Ads blocked, no start delay (needs the Safari user agent, see below) | Works (phone, 2026-11-07) | 2026-11-07 |
 | Spotify | DRM, so no video mode. Handled by a dedicated desktop-UA WebView instead (decisions.md "Spotify"). Ads not blocked, short gap between tracks | Works with limits | 2026-11-06 |
 | Bare media file URLs (`https://host/file.mp4`) | iOS opens its generic viewer, there is no page or `<video>` for us | Not supported | Phase 4 |
-| YouTube | Pauses itself on screen lock | Worked around (lock-screen play handler resumes) | Phase 4 |
+| YouTube | Pauses itself on screen lock. Its pages send `require-trusted-types-for 'script'`, which used to stop every scriptlet from running (the blocker put the code in a script element's `textContent`); `js/src/adblock-content.js` now wraps that in a Trusted Types policy. In-stream ads are stripped by scriptlets from the optional AdGuard Base list. With the list on but the scriptlets not running, its network rule kills the ad stream and the player stays black | Fixed 2026-11-07, needs the phone test (turn AdGuard Base on) | 2026-11-07 |
 
 ## Corpus lead log (desktop WebKit, `npm run corpus` in `js/`)
 
