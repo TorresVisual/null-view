@@ -23,18 +23,21 @@ Desktop WebKit is not iOS: no blocker, other codecs, some sites bot-wall it. Tre
 
 ## Custom rules that help
 
-### Joyn (joyn.at), tested 2026-11-07
+### Joyn (joyn.at), open problem 2026-11-07
 
-With the AdGuard German list on, ads no longer showed on joyn.at but the title only started after a delay. The list's Joyn rules are written for `joyn.de`: the `prevent-fetch` scriptlet is what turns the blocked ad-pod request into an instant empty answer (scriptlet lets the request fail, then returns a fake empty response), and it does not apply on `.at`. Paste into Settings, Custom rules:
+Symptom: with ads blocked the title only starts after about 40 s. The show's own video stays paused with its poster until then; no ad is visible. uBlock Origin on a PC starts the title straight away.
+
+What is known:
+- Joyn's ad service lives at `somquery.sqrt-5041.de` (`/v1/ad-pod/`). uBlock blocks it for `joyn.at` as XHR only (`||sqrt-5041.de^$xhr,domain=joyn.at|joyn.de`, uAssets issue 18684) and adds a `no-fetch-if zomap.de` scriptlet for `joyn.de/at/ch`.
+- uBlock also lists **exceptions** for `joyn.de` so its lists do not break the player: `ad.71i.de/global_js/AppConfig/Joyn/desktop.json`, `adition.com/1x1.gif`, `aws.route71.net/ad-`, `research.de.com/bb-mx/prime`, `script.ioam.de/iam.js`, `securepubads.g.doubleclick.net/pcs/view/`. Our lists block `ad.71i.de` (AdGuard German), `ioam.de` (EasyPrivacy) and `adition.com` (EasyList, AdGuard Mobile).
+- **A `@@` line in Custom rules cannot undo another list's block**: Safari's ignore-previous-rules only reaches earlier rules of the same compiled list, and each list compiles separately. Exceptions only work inside the list that blocks.
+- The desktop browser cannot reproduce it (the player errors out before asking for ads).
+
+Bisect on the phone: all built-in lists off, Custom rules only:
 
 ```
-! Joyn Austria: copies of AdGuard German's joyn.de rules, host independent
-/ad-pod/$domain=joyn.at
-joyn.at#%#//scriptlet('prevent-fetch', '/\/v\d+\/ad-pod\//')
+||sqrt-5041.de^$xmlhttprequest,domain=joyn.at
 joyn.at#%#//scriptlet('prevent-fetch', 'zomap.de')
-joyn.at##div.MuiBox-root[class*=" mui-"]:has(> div[id^="BTS_"][id*="_Incontent-"])
-@@||imagesrv.adition.com/1x1.gif$domain=joyn.at
-@@||securepubads.g.doubleclick.net/pcs/view^$domain=joyn.at
 ```
 
-Assumes the ad-pod path on `.at` is the same `/v1/ad-pod/` as on `.de` (not confirmed: the desktop browser cannot reach the playback step). If the delay stays, the phone log or a Safari Web Inspector network capture of the first seconds of playback gives the real host and path.
+If the title then starts at once, turn lists back on one at a time to find which one stalls the player. If an exception is needed, the fix is to append the custom `@@` lines to every list before it is converted (not built).
