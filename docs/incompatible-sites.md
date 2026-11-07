@@ -5,7 +5,7 @@ Where video mode cannot engage and the app behaves as a plain browser (decisions
 | Site / kind | Problem | Status | Found |
 |---|---|---|---|
 | DRM streaming (Netflix, Disney+, Prime Video, etc.) | Video mode is allowed since 2026-11-07 (decisions.md "Video"). Untested: fill in per site from the phone. Server-inserted ads are not blockable | Untested | 2026-11-07 |
-| Joyn (joyn.at) | DRM video in web-component players (`<video>` inside shadow roots): video mode works since the shadow-root fix. Ads not checked | Works (phone, 2026-11-07) | 2026-11-07 |
+| Joyn (joyn.at) | DRM video in web-component players (`<video>` inside shadow roots): video mode works since the shadow-root fix. Ads blocked, no start delay (needs the Safari user agent, see below) | Works (phone, 2026-11-07) | 2026-11-07 |
 | Spotify | DRM, so no video mode. Handled by a dedicated desktop-UA WebView instead (decisions.md "Spotify"). Ads not blocked, short gap between tracks | Works with limits | 2026-11-06 |
 | Bare media file URLs (`https://host/file.mp4`) | iOS opens its generic viewer, there is no page or `<video>` for us | Not supported | Phase 4 |
 | YouTube | Pauses itself on screen lock | Worked around (lock-screen play handler resumes) | Phase 4 |
@@ -23,7 +23,7 @@ Desktop WebKit is not iOS: no blocker, other codecs, some sites bot-wall it. Tre
 
 ## Custom rules that help
 
-### Joyn (joyn.at), open problem 2026-11-07
+### Joyn (joyn.at), solved 2026-11-07 (the 29 s stall was the default WKWebView user agent)
 
 Symptom: with ads blocked the title only starts after about 40 s. The show's own video stays paused with its poster until then; no ad is visible. uBlock Origin on a PC starts the title straight away.
 
@@ -57,3 +57,5 @@ Fifth log (2026-11-07, build with `src=`/`ns`/`rs`/`err`): the first title start
 Shield-off control (2026-11-07, joyn.at allowlisted, two rounds of 4 titles, reported by the owner): stall, no stall, stall, no stall both times; the 4th title of round 2 showed an ad and did not stall. So the stall happens with nothing blocked, at about the same rate as with the shield on: **our content blocking is not the cause**. Remaining suspects: Joyn's own ad/startup wait on iOS (~29 s timeout), or our page-world hooks in `fullscreen-hook.js` (visibility spoof, `pause()` patch, fullscreen patch), which stay active when the shield is off. Next control: the same four titles in plain Safari on the phone.
 
 Safari control (2026-11-07, plain Safari on the phone, 3 titles): no stall, an ad on the first. So the stall comes from how this app loads the page, not from Joyn alone. The app set no user agent, so WKWebView sent its default one (no `Version/x … Safari/604.1`), which sites read as an in-app browser. Change: the main WebView now sends the Safari-on-iPhone UA (`Core/.../UserAgent.swift`). One change only, so the next test says whether this was it. If it stalls still, the next suspects are the page-world hooks in `fullscreen-hook.js` (visibility spoof first) and `mediaTypesRequiringUserActionForPlayback = []`.
+
+**Result (2026-11-07): solved.** With the Safari user agent, 0 of 6 titles stalled and no ads were shown (before: about every second title waited ~29 s). The cause was the default WKWebView user agent, which Joyn reads as an in-app browser; it then waited for an ad/startup step that never completes there. The lesson for other sites: a site that behaves differently in the app than in Safari is first checked against the user agent. The diagnostics (net lines, `others:`, `src=`/`ns`/`rs`/`err`) stay in the log, they are cheap.
