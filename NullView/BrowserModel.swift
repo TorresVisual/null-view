@@ -29,6 +29,9 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     @Published var showSpotify = false
     /// The last popup the page tried to open on its own; the banner offers to open it anyway.
     @Published var blockedPopup: URL?
+    /// A short confirmation ("Added to queue · 3"), shown as a bar for a couple of seconds.
+    @Published private(set) var toast: String?
+    private var toastTask: Task<Void, Never>?
     nonisolated static let lastURLKey = "lastURL"
     private var cancellables: Set<AnyCancellable> = []
 
@@ -153,6 +156,47 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         picker.start()
     }
 
+    func showToast(_ text: String) {
+        toast = text
+        toastTask?.cancel()
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.5))
+            if !Task.isCancelled { self?.toast = nil }
+        }
+    }
+
+    /// Long-press menu on a link (issue #15): add the page to the queue or Watch later without leaving this one.
+    func saveLink(_ link: URL, toQueue: Bool) {
+        Task {
+            let title = await linkTitle(link)
+            let lib = watch.library
+            if toQueue {
+                lib.enqueue(link, title: title)
+                showToast("Added to queue · \(lib.store.queue().count)")
+            } else {
+                showToast(lib.toggleLater(link, title: Library.cleanTitle(title)) ? "Added to Watch later" : "Removed from Watch later")
+            }
+        }
+    }
+
+    /// The link's visible label, read from the page: the longest of the text, aria-label, title and image alt of
+    /// the anchors pointing at it (a thumbnail and a title often share one address). Untrusted page text; empty if none.
+    private func linkTitle(_ link: URL) async -> String {
+        let js = """
+        let best = '';
+        for (const a of document.querySelectorAll('a[href]')) {
+          if (a.href !== href) continue;
+          for (const t of [a.innerText, a.getAttribute('aria-label'), a.title, a.querySelector('img')?.alt]) {
+            const s = (t || '').trim();
+            if (s.length > best.length) best = s;
+          }
+        }
+        return best.slice(0, 300);
+        """
+        let r = try? await webView.callAsyncJavaScript(js, arguments: ["href": link.absoluteString], contentWorld: .defaultClient)
+        return Library.cleanTitle(r as? String ?? "")
+    }
+
     func openBlockedPopup() {
         guard let u = blockedPopup else { return }
         blockedPopup = nil
@@ -236,6 +280,27 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     }
 
     // MARK: WKUIDelegate
+
+    /// Our two actions go in front of the system's link menu (Open, Copy, Share, ...). Web links only, and
+    /// not Spotify links, which open the dedicated player and are not videos. nil = the system's own menu.
+    func webView(_ w: WKWebView, contextMenuConfigurationForElement info: WKContextMenuElementInfo,
+                 completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
+        guard let link = info.linkURL, AddressInput.webURL(link.absoluteString) != nil, !SpotifyPlayer.isSpotify(link) else {
+            completionHandler(nil)
+            return
+        }
+        let later = watch.library.isLater(link)
+        completionHandler(UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] suggested in
+            let queue = UIAction(title: "Add to queue", image: UIImage(systemName: "text.badge.plus")) { _ in
+                self?.saveLink(link, toQueue: true)
+            }
+            let watchLater = UIAction(title: later ? "Remove from Watch later" : "Watch later",
+                                      image: UIImage(systemName: later ? "bookmark.slash" : "bookmark")) { _ in
+                self?.saveLink(link, toQueue: false)
+            }
+            return UIMenu(children: [queue, watchLater] + suggested)
+        })
+    }
 
     /// `target=_blank` and `window.open` load in the same view (decisions.md), except a window the page
     /// opens by script to another site (popunder ads): that is blocked and offered in a banner.

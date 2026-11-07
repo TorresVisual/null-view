@@ -85,7 +85,7 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 - **Video identity:** canonical page URL (tracking parameters stripped) plus the video's index among the page's videos. Single-page sites change the URL without a reload, so the detector listens for URL changes. Resume sets the position once the video's metadata has loaded.
 - **Continue Watching:** past roughly 15 seconds and not within the last few percent of the duration. Live streams (no duration) are excluded. The thresholds are constants and may be tuned later.
 - **History** auto-deletes after 90 days. **Continue Watching** entries go when the video is marked complete or after 60 days untouched. **Watch Later** is never auto-deleted.
-- **Queue:** an ordered list of page URLs. When a video ends, navigate to the next one and enter video mode.
+- **Queue:** an ordered list of page URLs. When a video ends, navigate to the next one and enter video mode. **Link menu (issue #15, 2026-11-07):** long-pressing a link on a page offers "Add to queue" and "Watch later" (`BrowserModel` context-menu delegate), so a video can be queued without leaving the list being browsed. Queue items carry a `title` read from the page's own anchors for that address (untrusted text, trimmed to 200 characters); no page is fetched in the background. Not built: a `nullview://queue` deep link, a Next button in video mode, "Play next".
 - **Relaunch:** reopen the last URL and show a "Resume where you left off" banner. Nothing auto-plays until the user taps it.
 
 ## App layout

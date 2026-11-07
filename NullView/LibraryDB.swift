@@ -22,7 +22,11 @@ final class LibraryDB: LibraryStore, SiteStore {
                     CREATE TABLE IF NOT EXISTS \(t) (page TEXT PRIMARY KEY, title TEXT NOT NULL, poster TEXT, at REAL NOT NULL)
                     """)
             }
-            try db.execute(sql: "CREATE TABLE IF NOT EXISTS queue (n INTEGER PRIMARY KEY AUTOINCREMENT, page TEXT NOT NULL)")
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS queue (n INTEGER PRIMARY KEY AUTOINCREMENT, page TEXT NOT NULL, title TEXT NOT NULL DEFAULT '')")
+            // Queue titles (issue #15): tables made before it lack the column.
+            if try !db.columns(in: "queue").contains(where: { $0.name == "title" }) {
+                try db.execute(sql: "ALTER TABLE queue ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+            }
             try db.execute(sql: "CREATE TABLE IF NOT EXISTS site (url TEXT PRIMARY KEY, name TEXT NOT NULL, opens INTEGER NOT NULL, at REAL NOT NULL)")
         }
     }
@@ -67,12 +71,12 @@ final class LibraryDB: LibraryStore, SiteStore {
     func saveLater(_ p: SavedPage) { savePage("later", p) }
     func deleteLater(page: String) { run("DELETE FROM later WHERE page = ?", [page]) }
 
-    func queue() -> [String] { rows("SELECT page FROM queue ORDER BY n").map { $0["page"] } }
-    func setQueue(_ pages: [String]) {
+    func queue() -> [QueueItem] { rows("SELECT page, title FROM queue ORDER BY n").map { QueueItem(page: $0["page"], title: $0["title"]) } }
+    func setQueue(_ items: [QueueItem]) {
         do {
             try db.write { db in
                 try db.execute(sql: "DELETE FROM queue")
-                for p in pages { try db.execute(sql: "INSERT INTO queue (page) VALUES (?)", arguments: [p]) }
+                for i in items { try db.execute(sql: "INSERT INTO queue (page, title) VALUES (?, ?)", arguments: [i.page, i.title]) }
             }
         } catch { NSLog("LibraryDB: \(error)") }
     }

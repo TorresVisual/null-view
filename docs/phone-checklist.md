@@ -34,6 +34,7 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] Watch past 15 s, leave: the video is under Continue Watching and resumes at that point.
 - [ ] Watch Later add/remove, queue add, reorder, clear. When a video ends, the queue plays the next page.
 - [ ] History shows visited pages; search, sort and site filter work.
+- [ ] Link menu: on a YouTube results page long-press a video thumbnail. The menu has "Add to queue" and "Watch later" above the system items. Tap "Add to queue": a bar says "Added to queue · 1", the page stays put. Add two more. Library > Queue lists them by real title (not "youtube.com"), reorders, and the first plays on, with the next loading when it ends. Note whether the link preview is still shown (it may be gone). A `spotify.com` link and a non-link long-press show the normal menu.
 
 ## Sites
 - [ ] Blank start page shows "Add site". Add youtube.com: a tile appears; "cute cats" is rejected.

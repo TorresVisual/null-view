@@ -138,7 +138,11 @@ struct LibraryView: View {
             all = library.store.history().map { saved($0, detail: "\(host($0.page)) · \(ago($0.date))") }
         case .queue:
             all = library.store.queue().map {
-                Item(id: $0, page: $0, title: host($0), poster: nil, detail: $0, progress: nil)
+                // No title (queued before titles existed, or the page gave none): host and path say more than the host alone.
+                let u = URL(string: $0.page)
+                let fallback = host($0.page) + (u?.path == "/" ? "" : u?.path ?? "")
+                return Item(id: $0.page, page: $0.page, title: $0.title.isEmpty ? fallback : $0.title, poster: nil,
+                            detail: host($0.page), progress: nil)
             }
         }
     }

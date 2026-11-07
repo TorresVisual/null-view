@@ -37,10 +37,12 @@ struct BrowserView: View {
             if let u = watch.resumeOffer, !videoMode.active { resumeBar(u).transition(bar) }
             if clipboardOffer && !videoMode.active { clipboardBar.transition(bar) }
             if model.blockedPopup != nil && !videoMode.active { popupBar.transition(bar) }
+            if let t = model.toast, !videoMode.active { toastBar(t).transition(bar) }
             if !videoMode.active { toolbar }
         }
         .animation(.easeInOut(duration: 0.2), value: clipboardOffer)
         .animation(.easeInOut(duration: 0.2), value: model.blockedPopup)
+        .animation(.easeInOut(duration: 0.2), value: model.toast)
         .animation(.easeInOut(duration: 0.2), value: watch.resumeOffer)
         .ignoresSafeArea(videoMode.active ? .all : [])
         .statusBarHidden(videoMode.active)
@@ -183,6 +185,17 @@ struct BrowserView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
         .background(.bar)
+    }
+
+    private func toastBar(_ text: String) -> some View {
+        HStack {
+            Image(systemName: "checkmark.circle")
+            Text(text).font(.subheadline)
+            Spacer()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(.bar)
+        .accessibilityElement(children: .combine)
     }
 
     private var popupBar: some View {

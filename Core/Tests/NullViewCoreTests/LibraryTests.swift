@@ -81,10 +81,21 @@ final class LibraryTests: XCTestCase {
         let lib = Library(store: MemoryLibraryStore())
         let a = URL(string: "https://a.example/1")!, b = URL(string: "https://b.example/2")!
         lib.enqueue(a); lib.enqueue(b); lib.enqueue(a)
-        XCTAssertEqual(lib.store.queue(), ["https://a.example/1", "https://b.example/2"])
+        XCTAssertEqual(lib.store.queue().map(\.page), ["https://a.example/1", "https://b.example/2"])
         XCTAssertEqual(lib.popNext(), a)
         lib.removeFromQueue(page: "https://b.example/2")
         XCTAssertNil(lib.popNext())
+    }
+
+    func testQueueTitles() {
+        let lib = Library(store: MemoryLibraryStore())
+        let a = URL(string: "https://a.example/1?utm_source=x")!
+        lib.enqueue(a)                                            // no title yet
+        lib.enqueue(a, title: "  Part\n one  ")                   // a later enqueue fills it in, whitespace tidied
+        lib.enqueue(a, title: "Other")                            // but never overwrites a title
+        XCTAssertEqual(lib.store.queue(), [QueueItem(page: "https://a.example/1", title: "Part one")])
+        lib.enqueue(URL(string: "https://b.example/2")!, title: String(repeating: "x", count: 500))
+        XCTAssertEqual(lib.store.queue().last?.title.count, Library.maxTitle)
     }
 
     func testQuerySearchSiteAndSort() {

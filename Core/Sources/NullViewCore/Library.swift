@@ -27,6 +27,14 @@ public struct SavedPage: Equatable {
     }
 }
 
+/// A page waiting in the queue. `title` is empty when the page did not tell us one.
+public struct QueueItem: Equatable {
+    public let page: String        // canonical URL
+    public var title: String
+
+    public init(page: String, title: String = "") { self.page = page; self.title = title }
+}
+
 /// Plain storage, no rules. The app implements it with GRDB (`NullView/LibraryDB.swift`, only
 /// built on the runner: GRDB needs a system SQLite that the Windows toolchain lacks); tests use
 /// `MemoryLibraryStore`. All rules live in `Library`, so they are tested here.
@@ -49,8 +57,8 @@ public protocol LibraryStore: AnyObject {
     func saveLater(_ page: SavedPage)
     func deleteLater(page: String)
 
-    func queue() -> [String]
-    func setQueue(_ pages: [String])
+    func queue() -> [QueueItem]
+    func setQueue(_ items: [QueueItem])
 }
 
 /// Watching state rules. Thresholds are constants and may be tuned (decisions.md).
@@ -131,21 +139,35 @@ public final class Library {
 
     // MARK: Queue
 
-    /// Appends the page unless it is already queued.
-    public func enqueue(_ url: URL) {
+    /// Appends the page unless it is already queued. A queued page without a title picks up this one.
+    /// The title comes from page content (untrusted), so it is trimmed and cut to `maxTitle`.
+    public func enqueue(_ url: URL, title: String = "") {
         let page = VideoID.canonical(url)
+        let title = Self.cleanTitle(title)
         var q = store.queue()
-        if !q.contains(page) { q.append(page); store.setQueue(q) }
+        if let n = q.firstIndex(where: { $0.page == page }) {
+            if q[n].title.isEmpty, !title.isEmpty { q[n].title = title; store.setQueue(q) }
+        } else {
+            q.append(QueueItem(page: page, title: title))
+            store.setQueue(q)
+        }
     }
 
-    public func removeFromQueue(page: String) { store.setQueue(store.queue().filter { $0 != page }) }
+    public static let maxTitle = 200
+
+    /// Page-supplied text for a title: whitespace collapsed, cut to `maxTitle`.
+    public static func cleanTitle(_ raw: String) -> String {
+        String(raw.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(maxTitle))
+    }
+
+    public func removeFromQueue(page: String) { store.setQueue(store.queue().filter { $0.page != page }) }
 
     /// The next page to play; it leaves the queue. nil when the queue is empty.
     public func popNext() -> URL? {
         var q = store.queue()
         while !q.isEmpty {
-            let page = q.removeFirst()
-            if let u = URL(string: page) { store.setQueue(q); return u }
+            let item = q.removeFirst()
+            if let u = URL(string: item.page) { store.setQueue(q); return u }
         }
         store.setQueue(q)
         return nil
@@ -200,7 +222,7 @@ public final class MemoryLibraryStore: LibraryStore {
     private var recs: [VideoID: WatchRecord] = [:]
     private var hist: [String: SavedPage] = [:]
     private var later: [String: SavedPage] = [:]
-    private var q: [String] = []
+    private var q: [QueueItem] = []
 
     public init() {}
 
@@ -220,6 +242,6 @@ public final class MemoryLibraryStore: LibraryStore {
     public func saveLater(_ p: SavedPage) { later[p.page] = p }
     public func deleteLater(page: String) { later[page] = nil }
 
-    public func queue() -> [String] { q }
-    public func setQueue(_ pages: [String]) { q = pages }
+    public func queue() -> [QueueItem] { q }
+    public func setQueue(_ items: [QueueItem]) { q = items }
 }
