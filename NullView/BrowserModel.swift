@@ -38,6 +38,8 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         cfg.mediaTypesRequiringUserActionForPlayback = []
         cfg.allowsPictureInPictureMediaPlayback = true
         webView = WKWebView(frame: .zero, configuration: cfg)
+        // Joyn stalled ~29 s on about half the plays here and never in Safari; the default WKWebView UA is the visible difference.
+        webView.customUserAgent = UserAgent.safari(systemVersion: UIDevice.current.systemVersion)
         let videoScript = VideoDetector.makeScript()
         let det = VideoDetector()
         det.attach(to: cfg.userContentController, scriptLoaded: videoScript != nil)
