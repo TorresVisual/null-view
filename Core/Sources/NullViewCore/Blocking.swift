@@ -161,6 +161,9 @@ public enum Filters {
                    url: URL(string: "https://filters.adtidy.org/ios/filters/18_optimized.txt")!),
         FilterList(id: "adguard-popups", name: "AdGuard Popups",
                    url: URL(string: "https://filters.adtidy.org/ios/filters/19_optimized.txt")!),
+        // YouTube's in-stream ads are stripped by scriptlets (set-constant/json-prune on the player response) that only this list carries.
+        FilterList(id: "adguard-base", name: "AdGuard Base",
+                   url: URL(string: "https://filters.adtidy.org/ios/filters/2_optimized.txt")!),
         // Regional list: carries Joyn's ad hosts and ad-pod requests, which the general lists leave alone.
         FilterList(id: "adguard-german", name: "AdGuard German",
                    url: URL(string: "https://filters.adtidy.org/ios/filters/6_optimized.txt")!),
