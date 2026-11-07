@@ -25,6 +25,8 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] Gestures: drag sideways seeks, left half up/down brightness, right half up/down volume, double-tap skips 10 s, long-press plays at 2x, one tap toggles controls.
 - [ ] Page's own fullscreen button enters video mode. Back control returns to the same page and position.
 - [ ] Lock the screen: audio keeps playing. Picture in Picture works.
+- [ ] Gear button (video mode, top right): pick 1.5× on YouTube. Open another YouTube video: it starts at 1.5× (also before entering video mode). Pick 1× and it stops. No speed item on a live stream.
+- [ ] Sleep timer: 15 minutes with the screen locked, the video pauses on time (check the log for `sleep timer: paused`). "End of this video" with a queued page: the video ends and the queue does not advance. Leaving video mode switches the timer off.
 - [ ] A page with an embedded video (Reddit post, w3schools tryit) is detected.
 - [ ] A DRM site (Netflix, or whichever you use): play a title, tap the video button. Pass = video mode engages with working play/pause/seek, or the button stays disabled and the page still plays normally. Note the result per site in `docs/incompatible-sites.md`.
 

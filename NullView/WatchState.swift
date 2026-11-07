@@ -73,6 +73,10 @@ final class WatchState: ObservableObject {
             if e.pos < 2, let p = library.resumePosition(for: id), p < dur {
                 detector.command(frame: v.frame, index: e.i, "seek", p)
             }
+            // Speed chosen earlier on this site (also outside video mode).
+            if let r = videoMode.savedRate(for: page), abs((e.rate ?? 1) - r) > 0.01 {
+                detector.command(frame: v.frame, index: e.i, "rate", r)
+            }
         }
 
         if autoEnter, !awaitCommit, !videoMode.active { enterNow() }
@@ -80,6 +84,7 @@ final class WatchState: ObservableObject {
         if e.ended {
             guard ended.insert(id).inserted else { return }
             persist(id, v)
+            if videoMode.consumeQueueHold() { return }
             if let next = library.popNext() {
                 detector.note("queue: next \(next.absoluteString.prefix(80))")
                 onNavigate?(next)

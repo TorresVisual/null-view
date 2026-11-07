@@ -15,6 +15,8 @@ final class VideoMode: ObservableObject {
     @Published private(set) var video: VideoEntry?
     @Published private(set) var hud: String?
     @Published private(set) var hudLevel: HUDLevel?
+    /// Sleep timer; lives only while video mode is on (leaving video mode switches it off).
+    @Published private(set) var sleep = SleepTimer(.off)
 
     private let detector: VideoDetector
     private let webView: WKWebView
@@ -23,6 +25,9 @@ final class VideoMode: ObservableObject {
     private var rateBeforeBoost: Double?
     private var hideTask: Task<Void, Never>?
     private var hudTask: Task<Void, Never>?
+    private var sleepTask: Task<Void, Never>?
+    private static let speedKey = "speedPrefs"
+    private var speeds = SpeedPrefs(rates: UserDefaults.standard.dictionary(forKey: speedKey) as? [String: Double] ?? [:])
     let volume = SystemVolume()
     private var remote: [(MPRemoteCommand, Any)] = []
 
@@ -60,6 +65,7 @@ final class VideoMode: ObservableObject {
     func exit() {
         guard active else { return }
         if rateBeforeBoost != nil { setRate(rateBeforeBoost ?? 1); rateBeforeBoost = nil }
+        setSleep(.off)
         send("exit")
         unregisterRemote()
         active = false
@@ -79,6 +85,7 @@ final class VideoMode: ObservableObject {
         guard active, let t = target else { return }
         guard let v = detector.tracker.video(frame: t.frame, i: t.index) else { exit(); return }
         if v.entry != video { video = v.entry }
+        checkSleep()
     }
 
     // MARK: Commands
@@ -96,6 +103,48 @@ final class VideoMode: ObservableObject {
     func seek(by d: Double) { seek(to: position + d); flash(d < 0 ? "−\(Int(-d)) s" : "+\(Int(d)) s") }
     func setRate(_ r: Double) { send("rate", r) }
     func togglePiP() { send("pip"); poke() }
+
+    // MARK: Speed (remembered per site) and sleep timer
+
+    func savedRate(for url: URL) -> Double? { speeds.rate(for: url) }
+
+    func setSpeed(_ r: Double) {
+        setRate(r)
+        if let u = webView.url {
+            speeds.set(r, for: u)
+            UserDefaults.standard.set(speeds.rates, forKey: Self.speedKey)
+        }
+        flash(PlaybackSpeed.label(r))
+        poke()
+    }
+
+    func setSleep(_ c: SleepTimer.Choice) {
+        sleepTask?.cancel()
+        sleep = SleepTimer(c)
+        guard let deadline = sleep.deadline else { return }
+        // Also checked on every detector report: Task.sleep can fall behind if the process is suspended.
+        sleepTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
+            if !Task.isCancelled { self?.checkSleep() }
+        }
+    }
+
+    private func checkSleep() {
+        guard sleep.isDue() else { return }
+        send("pause")
+        setSleep(.off)
+        detector.note("sleep timer: paused")
+        flash("Sleep timer: paused")
+    }
+
+    /// The video ended. True = the "end of this video" timer is on, so the queue must not advance.
+    func consumeQueueHold() -> Bool {
+        guard sleep.holdsQueue else { return false }
+        setSleep(.off)
+        detector.note("sleep timer: queue held")
+        flash("Sleep timer: stopped")
+        return true
+    }
 
     func boost(_ on: Bool) {
         if on, rateBeforeBoost == nil { rateBeforeBoost = video?.rate ?? 1; setRate(2); flash("2×") }
@@ -218,6 +267,7 @@ struct VideoModeView: View {
             HStack {
                 circleButton("chevron.backward", "Exit video mode") { mode.exit() }
                 Spacer()
+                optionsMenu
                 circleButton(mode.video?.pip == true ? "pip.exit" : "pip.enter", "Picture in picture") { mode.togglePiP() }
             }
             Spacer()
@@ -232,6 +282,24 @@ struct VideoModeView: View {
         }
         .padding(.horizontal, 24).padding(.vertical, 12)
         .foregroundStyle(.white)
+    }
+
+    /// Speed (not for live streams) and sleep timer. A native Menu, so no custom panel to maintain.
+    private var optionsMenu: some View {
+        Menu {
+            if mode.canSeek {
+                Picker("Speed", selection: Binding(get: { mode.video?.rate ?? 1 }, set: { mode.setSpeed($0) })) {
+                    ForEach(PlaybackSpeed.steps, id: \.self) { Text(PlaybackSpeed.label($0)).tag($0) }
+                }
+            }
+            Picker("Sleep timer", selection: Binding(get: { mode.sleep.choice }, set: { mode.setSleep($0) })) {
+                ForEach(SleepTimer.choices, id: \.self) { Text(SleepTimer.label($0)).tag($0) }
+            }
+        } label: {
+            Image(systemName: mode.sleep.choice == .off ? "gearshape" : "moon.zzz.fill").font(.title3).frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .accessibilityLabel("Playback options")
     }
 
     @ViewBuilder private var scrubber: some View {
