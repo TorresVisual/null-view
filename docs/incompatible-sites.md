@@ -30,7 +30,7 @@ With the AdGuard German list on, ads no longer showed on joyn.at but the title o
 ```
 ! Joyn Austria: copies of AdGuard German's joyn.de rules, host independent
 /ad-pod/$domain=joyn.at
-joyn.at#%#//scriptlet('prevent-fetch', '//vd+/ad-pod//')
+joyn.at#%#//scriptlet('prevent-fetch', '/\/v\d+\/ad-pod\//')
 joyn.at#%#//scriptlet('prevent-fetch', 'zomap.de')
 joyn.at##div.MuiBox-root[class*=" mui-"]:has(> div[id^="BTS_"][id*="_Incontent-"])
 @@||imagesrv.adition.com/1x1.gif$domain=joyn.at
