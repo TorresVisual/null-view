@@ -72,7 +72,8 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
             onFullscreen?(frame, index)
             return
         case let .net(_, lines):
-            for l in lines where netSeen.insert(l).inserted { note("net \(l)") }
+            // Capped per page: ad-heavy pages without a video must not fill the log.
+            for l in lines where netSeen.count < 80 && netSeen.insert(l).inserted { note("net \(l)") }
             return
         }
         tracker.apply(msg, isMainFrame: message.frameInfo.isMainFrame)

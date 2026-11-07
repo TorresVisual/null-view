@@ -67,10 +67,11 @@ test('state changes are reported quickly, an unchanged state is not repeated', a
   await fake('#a', { paused: false, readyState: 4, duration: 60, currentTime: 1 }, 'playing');
   await settle(400);
   assert.equal(lastVideos()[0].playing, true);
-  const n = msgs.length;
+  const count = () => msgs.filter((m) => m.type === 'videos').length;
+  const n = count();
   await page.evaluate(() => document.querySelector('#a').dispatchEvent(new Event('timeupdate')));
   await settle(1300);
-  assert.equal(msgs.length, n);          // nothing changed, so no message
+  assert.equal(count(), n);          // nothing changed, so no video report
   await fake('#a', { paused: true, currentTime: 2 }, 'pause');
   await settle(400);
   assert.equal(lastVideos()[0].playing, false);
@@ -249,4 +250,18 @@ test('diagnostic: ad-looking and failed fetch/XHR calls are forwarded as net lin
   assert.ok(lines.some((l) => l.includes('nv-down.invalid') && l.includes('ERR')), JSON.stringify(lines));
   assert.ok(lines.some((l) => l.includes('nv.test/ima3/thing')), JSON.stringify(lines));
   assert.ok(!lines.some((l) => l.includes('/plain/page')));
+});
+
+test('diagnostic: sent even without a video, and failed script loads are included', async () => {
+  await load('<p>no video here</p>');
+  await settle(300);
+  await page.evaluate(async () => {
+    await fetch('/v1/ad-pod/abc').catch(() => {});
+    await new Promise((r) => { const s = document.createElement('script'); s.src = 'http://nv-down.invalid/p.js'; s.onerror = r; document.head.append(s); });
+  });
+  await settle(2200);
+  assert.equal(msgs.filter((m) => m.type === 'videos').length, 0);
+  const lines = msgs.filter((m) => m.type === 'net').flatMap((m) => m.lines);
+  assert.ok(lines.some((l) => l.includes('nv.test/v1/ad-pod/abc')), JSON.stringify(lines));
+  assert.ok(lines.some((l) => l.includes('script nv-down.invalid/p.js ERR')), JSON.stringify(lines));
 });

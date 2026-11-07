@@ -58,14 +58,16 @@
       EVENTS.forEach((e) => v.addEventListener(e, () => schedule(100), true));
       v.addEventListener('timeupdate', () => schedule(fast ? 250 : 1000), true);
     });
-    if (!vids.length && !everHadVideos) return;
-    everHadVideos = true;
-    // Network diagnostic written by fullscreen-hook.js (page world); forwarded only on pages with a video.
+    // Network diagnostic written by fullscreen-hook.js (page world). Sent from every frame, video or not: a
+    // player stall can be an ad iframe's doing. Lines from a sub-frame carry its host. Native caps the volume.
     const net = document.documentElement.getAttribute('data-nv-net');
     if (net && net !== lastNet) {
       lastNet = net;
-      try { const lines = JSON.parse(net); if (Array.isArray(lines)) post({ type: 'net', frame, lines: lines.map(String) }); } catch (e) { /* forged or cut */ }
+      const tag = parent === window ? '' : '[' + location.host + '] ';
+      try { const lines = JSON.parse(net); if (Array.isArray(lines)) post({ type: 'net', frame, lines: lines.map((l) => tag + String(l)) }); } catch (e) { /* forged or cut */ }
     }
+    if (!vids.length && !everHadVideos) return;
+    everHadVideos = true;
     const videos = vids.slice(0, 50).map(describe);
     const msg = { type: 'videos', frame, videos };
     const json = JSON.stringify(msg);

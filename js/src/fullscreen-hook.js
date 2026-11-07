@@ -50,6 +50,12 @@
     clearTimeout(netTimer);
     netTimer = setTimeout(() => document.documentElement.setAttribute('data-nv-net', JSON.stringify(NET)), 300);
   };
+  // Scripts, styles and images the browser could not load (blocked by a rule list, offline): resource errors
+  // do not bubble, so listen in the capture phase.
+  addEventListener('error', (e) => {
+    const t = e.target;
+    if (t && t !== window && (t.src || t.href)) netLog(t.localName, t.src || t.href, 'ERR', performance.now());
+  }, true);
   const origFetch = window.fetch;
   if (typeof origFetch === 'function') {
     window.fetch = function (input, init) {
