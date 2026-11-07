@@ -3,6 +3,9 @@
 name: build-ios
 on: workflow_dispatch
 
+permissions:
+  contents: write # publish the rolling "latest" release
+
 concurrency:
   group: build-ios
   cancel-in-progress: true
@@ -44,6 +47,7 @@ jobs:
           -derivedDataPath build -clonedSourcePackagesDirPath SourcePackages
           -skipPackagePluginValidation
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          MARKETING_VERSION=1.0.${{ github.run_number }} CURRENT_PROJECT_VERSION=${{ github.run_number }}
           build
       - name: Package IPA
         run: |
@@ -52,3 +56,23 @@ jobs:
           zip -qr NullView.ipa Payload
       - uses: actions/upload-artifact@v4
         with: { name: NullView-ipa, path: NullView.ipa, retention-days: 7 }
+      # Rolling release "latest": raw IPA (no zip, no login) + an AltStore source.
+      # Phone: AltStore > Browse > Sources > + > the source URL below. Updates then show up in My Apps.
+      - name: Publish AltStore source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.run_number }}
+        run: |
+          base="https://github.com/$REPO/releases/download/latest"
+          jq -n --arg v "1.0.$RUN" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg b "$RUN" \
+            --arg url "$base/NullView.ipa" --argjson size "$(stat -f %z NullView.ipa)" \
+            --arg icon "https://raw.githubusercontent.com/$REPO/main/NullView/Assets.xcassets/AppIcon.appiconset/icon-1024.png" '
+            {name:"Null View", identifier:"com.nullview.source", apps:[{
+              name:"Null View", bundleIdentifier:"com.nullview.app", developerName:"Moritz",
+              subtitle:"Personal video browser", localizedDescription:"Personal video browser.",
+              iconURL:$icon, tintColor:"000000",
+              versions:[{version:$v, buildVersion:$b, date:$d, downloadURL:$url, size:$size, minOSVersion:"26.0"}]}]}' > altstore.json
+          gh release delete latest --cleanup-tag --yes --repo "$REPO" || true
+          gh release create latest NullView.ipa altstore.json --repo "$REPO" --target "$GITHUB_SHA" \
+            --title "Build $RUN" --notes "Source URL: $base/altstore.json"
