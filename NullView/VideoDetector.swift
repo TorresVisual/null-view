@@ -73,7 +73,7 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
             return
         case let .net(_, lines):
             // Capped per page: ad-heavy pages without a video must not fill the log.
-            for l in lines where netSeen.count < 80 && netSeen.insert(l).inserted { note("net \(l)") }
+            for l in lines where netSeen.count < 150 && netSeen.insert(l).inserted { note("net \(l)") }
             return
         }
         tracker.apply(msg, isMainFrame: message.frameInfo.isMainFrame)
@@ -121,7 +121,7 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
     func note(_ s: String) {
         let t = Date().formatted(date: .omitted, time: .standard)
         log.append("\(t) \(s)")
-        if log.count > 200 { log.removeFirst(log.count - 200) }
+        if log.count > 300 { log.removeFirst(log.count - 300) }
     }
 
     var logText: String { log.suffix(15).joined(separator: "\n") }

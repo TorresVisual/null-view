@@ -38,7 +38,7 @@ public enum VideoMessage: Equatable {
     case net(frame: String, lines: [String])
 
     public static let maxVideosPerFrame = 50
-    public static let maxNetLines = 40
+    public static let maxNetLines = 60
 
     private struct Raw: Decodable {
         let type: String

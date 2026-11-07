@@ -129,7 +129,7 @@ final class VideoGestureTests: XCTestCase {
         XCTAssertNil(VideoMessage.parse(#"{"type":"net","frame":"a"}"#))
         let long = String(repeating: "x", count: 201)
         XCTAssertNil(VideoMessage.parse(#"{"type":"net","frame":"a","lines":["\#(long)"]}"#))
-        let many = Array(repeating: "\"x\"", count: 41).joined(separator: ",")
+        let many = Array(repeating: "\"x\"", count: 61).joined(separator: ",")
         XCTAssertNil(VideoMessage.parse(#"{"type":"net","frame":"a","lines":[\#(many)]}"#))
     }
 

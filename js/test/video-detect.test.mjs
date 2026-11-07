@@ -235,12 +235,13 @@ test('the page never sees itself hidden, so sites do not pause on background', a
   assert.deepEqual(r, [0, false, 'visible']);
 });
 
-test('diagnostic: ad-looking and failed fetch/XHR calls are forwarded as net lines, ordinary ones are not', async () => {
+test('diagnostic: fetch/XHR outcomes are forwarded as net lines, tracker hosts are skipped', async () => {
   await load('<video id=a width=640 height=360 src="blob:x"></video>');
   await settle(300);
   await page.evaluate(async () => {
     await fetch('/v1/ad-pod/abc').catch(() => {});                       // ad-looking
-    await fetch('/plain/page').catch(() => {});                          // ordinary: not logged
+    await fetch('/plain/page').catch(() => {});                          // ordinary: logged too now
+    await fetch('http://clarity.invalid/x').catch(() => {});             // tracker host: skipped
     await fetch('http://nv-down.invalid/x').catch(() => {});             // fails
     await new Promise((r) => { const x = new XMLHttpRequest(); x.open('GET', '/ima3/thing'); x.onloadend = r; x.send(); });
   });
@@ -249,7 +250,8 @@ test('diagnostic: ad-looking and failed fetch/XHR calls are forwarded as net lin
   assert.ok(lines.some((l) => l.includes('GET nv.test/v1/ad-pod/abc 200')), JSON.stringify(lines));
   assert.ok(lines.some((l) => l.includes('nv-down.invalid') && l.includes('ERR')), JSON.stringify(lines));
   assert.ok(lines.some((l) => l.includes('nv.test/ima3/thing')), JSON.stringify(lines));
-  assert.ok(!lines.some((l) => l.includes('/plain/page')));
+  assert.ok(lines.some((l) => l.includes('nv.test/plain/page 200')), JSON.stringify(lines));
+  assert.ok(!lines.some((l) => l.includes('clarity')), JSON.stringify(lines));
 });
 
 test('diagnostic: sent even without a video, and failed script loads are included', async () => {

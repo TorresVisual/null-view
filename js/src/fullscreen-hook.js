@@ -33,20 +33,23 @@
   for (const [k, v] of [['hidden', false], ['webkitHidden', false], ['visibilityState', 'visible'], ['webkitVisibilityState', 'visible']]) {
     Object.defineProperty(Document.prototype, k, { get: () => v, configurable: true });
   }
-  // Diagnostic (Joyn stalls ~40 s on some plays): remember fetch/XHR calls that failed, are still pending after
-  // 5 s, took over 3 s, or look like ads, in a DOM attribute. The isolated script forwards them to the log.
+  // Diagnostic (Joyn stalls ~40 s): remember each distinct fetch/XHR outcome (and failed script/style/image
+  // loads) except known trackers, in a DOM attribute. The isolated script forwards them to the log.
   // The page can forge the attribute, so native only logs the lines (length-checked), nothing else.
-  // ponytail: fetch and XHR only, not workers, iframes' parents or <script>/<img> loads.
+  // ponytail: fetch and XHR plus failed script/style/image loads. Not workers. Known tracker hosts are skipped.
   const NET = [];
-  const AD = /ad-pod|[/.]ads?[/.?]|vast|ima3|gampad|sqrt-|zomap|adition|71i[.]de|ioam|doubleclick|googlesyndication|hybrid-prd/i;
+  const NOISE = /clarity|tiktok|facebook|hotjar|datadog|launchdarkly|usercentrics|event-collector|youbora|npaw|datazoom|adjust|userreport|googletagmanager|google-analytics|analytics[.]google|sensic|theadex|usersnap|bing[.]com|fonts[.]g|cmp[.]p7s1/i;
+  const SEEN = new Set(); // method + place + result: each distinct outcome once, so beacons do not flood the log
   let netTimer = 0;
   const netLog = (method, url, result, start) => {
     const ms = Math.round(performance.now() - start);
     let where = url;
     try { const u = new URL(url, location.href); where = u.host + u.pathname; } catch (e) { /* keep raw */ }
-    if (!(result === 'ERR' || String(result).startsWith('pending') || ms > 3000 || AD.test(where))) return;
+    const key = method + where + result;
+    if (NOISE.test(where) || SEEN.has(key)) return;
+    SEEN.add(key);
     NET.push('+' + (start / 1000).toFixed(1) + 's ' + method + ' ' + where.slice(0, 90) + ' ' + result + ' ' + ms + 'ms');
-    if (NET.length > 40) NET.shift();
+    if (NET.length > 60) NET.shift();
     clearTimeout(netTimer);
     netTimer = setTimeout(() => document.documentElement.setAttribute('data-nv-net', JSON.stringify(NET)), 300);
   };
