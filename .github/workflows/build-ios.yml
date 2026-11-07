@@ -65,7 +65,11 @@ jobs:
           RUN: ${{ github.run_number }}
         run: |
           base="https://github.com/$REPO/releases/download/latest"
-          jq -n --arg v "1.0.$RUN" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg b "$RUN" \
+          # Read the versions back from the built app: AltStore rejects the install if they differ from the source.
+          plist=build/Build/Products/Release-iphoneos/NullView.app/Info.plist
+          V=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" $plist)
+          B=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" $plist)
+          jq -n --arg v "$V" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg b "$B" \
             --arg url "$base/NullView.ipa" --argjson size "$(stat -f %z NullView.ipa)" \
             --arg icon "https://raw.githubusercontent.com/$REPO/main/NullView/Assets.xcassets/AppIcon.appiconset/icon-1024.png" '
             {name:"Null View", identifier:"com.nullview.source", apps:[{
