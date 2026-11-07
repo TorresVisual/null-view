@@ -46,8 +46,8 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 
 ## Video
 
-- Scope: any HTML5 `<video>` on any site, including iframes and blob/MSE streams. **DRM sites are out.** Find incompatible sites empirically and list them in `docs/incompatible-sites.md`. No per-site extractors.
-- **Fail open:** if video mode can't engage (DRM, no controllable element), the page behaves as a plain browser and the video-mode button is disabled.
+- Scope: any HTML5 `<video>` on any site, including iframes and blob/MSE streams. **DRM video is allowed (amended 2026-11-07, was "DRM sites are out").** The owner wants DRM sites to play as far as possible. Video mode drives the `<video>` element and never touches its bytes, so DRM needs no special path: the detector still reports `drm` but no longer excludes it. Whether it works per site is found empirically on the phone. Ads inserted into the stream by the server cannot be blocked (same as Spotify); the content blocker still removes separately loaded ad requests and slots. Find incompatible sites empirically and list them in `docs/incompatible-sites.md`. No per-site extractors.
+- **Fail open:** if video mode can't engage (no controllable element), the page behaves as a plain browser and the video-mode button is disabled.
 - **Own fullscreen**, not the native iOS fullscreen player: rotate the app to landscape and expand the page's `<video>` with CSS. Custom controls and gestures sit on top. PiP uses the video element's presentation mode.
 - **Entry:** tapping the page's fullscreen button (intercepted) or tapping our floating button, which appears once a primary video is detected.
 - **Lock:** while in video mode, main-frame navigation and popups are cancelled. Exit through an explicit back control that returns to the same page and position.
@@ -102,7 +102,7 @@ Keep the Apple-only layer as thin as possible. Everything else runs on Windows o
 
 Included: WebView, basic navigation, real blocking with filter lists, allowlist and custom rules, video detection, dedicated video mode, fullscreen, **PiP, background playback**, playback position, Continue Watching, basic history, URL-scheme and clipboard sharing.
 
-Excluded: blocking stats, share extension, universal links, tabs, DRM sites, everything in the brief's non-goals.
+Excluded: blocking stats, share extension, universal links, tabs, everything in the brief's non-goals.
 
 ## Phase 0 (hard gate, stop rule)
 

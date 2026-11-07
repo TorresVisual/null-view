@@ -26,7 +26,7 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] Page's own fullscreen button enters video mode. Back control returns to the same page and position.
 - [ ] Lock the screen: audio keeps playing. Picture in Picture works.
 - [ ] A page with an embedded video (Reddit post, w3schools tryit) is detected.
-- [ ] A DRM site (Netflix): button stays disabled and the page still browses normally.
+- [ ] A DRM site (Netflix, or whichever you use): play a title, tap the video button. Pass = video mode engages with working play/pause/seek, or the button stays disabled and the page still plays normally. Note the result per site in `docs/incompatible-sites.md`.
 
 ## Library
 - [ ] Watch past 15 s, leave: the video is under Continue Watching and resumes at that point.

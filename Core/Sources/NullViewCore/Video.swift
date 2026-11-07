@@ -13,7 +13,7 @@ public struct VideoEntry: Equatable, Decodable {
     public let dur: Double?    // nil = unknown or live
     public let pos: Double
     public let live: Bool
-    public let drm: Bool       // MediaKeys attached: out of scope (decisions.md)
+    public let drm: Bool       // MediaKeys attached (diagnostic; still controllable)
     public let src: Bool       // has a source (currentSrc or MSE blob)
     public let rate: Double?   // playbackRate (optional: older reports lack it)
     public let pip: Bool?      // in picture-in-picture
@@ -24,7 +24,8 @@ public struct VideoEntry: Equatable, Decodable {
     public var isCandidate: Bool { drm || w * h >= Self.minArea }
     /// Muted looping clips are page decoration, not what the user watches.
     var isAmbient: Bool { muted && loop }
-    var isEligible: Bool { isCandidate && !drm && src }
+    /// DRM video is eligible: playback is driven through the element, not its bytes (decisions.md "DRM").
+    var isEligible: Bool { isCandidate && src }
 }
 
 /// What a frame sends us. Anything that does not fit is dropped.

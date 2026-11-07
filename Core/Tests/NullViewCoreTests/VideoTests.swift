@@ -56,8 +56,8 @@ final class VideoTests: XCTestCase {
 
         var drm = VideoTracker()
         drm.apply(msg("main", [entry(drm: true)]), isMainFrame: true)
-        XCTAssertTrue(drm.hasCandidate)                                         // button shows...
-        XCTAssertNil(drm.primary)                                               // ...but disabled
+        XCTAssertTrue(drm.hasCandidate)
+        XCTAssertEqual(drm.primary?.index, 0)                                   // DRM video is controllable like any other
 
         var tiny = VideoTracker()
         tiny.apply(msg("main", [entry(w: 1, h: 1), entry(i: 1, src: false)]), isMainFrame: true)

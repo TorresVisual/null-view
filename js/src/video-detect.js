@@ -160,7 +160,7 @@
     const t = e.target;
     const v = t.tagName === 'VIDEO' ? t : t.querySelector?.('video');
     const i = v ? [...document.querySelectorAll('video')].indexOf(v) : -1;
-    if (i < 0 || v.mediaKeys || !(v.currentSrc || v.src || v.srcObject)) return;
+    if (i < 0 || !(v.currentSrc || v.src || v.srcObject)) return;
     e.preventDefault();
     post({ type: 'fullscreen', frame, i });
   }, true);

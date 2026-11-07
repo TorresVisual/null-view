@@ -131,7 +131,7 @@ struct BrowserView: View {
     }
 
     /// Floating button: opens video mode on the primary video.
-    /// Disabled when nothing is controllable (DRM, no source): the page stays a plain browser.
+    /// Disabled when nothing is controllable (no source): the page stays a plain browser.
     private var videoButton: some View {
         VStack {
             Spacer()
