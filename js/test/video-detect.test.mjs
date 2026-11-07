@@ -153,6 +153,38 @@ test('an iframe inside a shadow root is pinned and the page around it hidden, he
   assert.equal(await style('#hdr', 'visibility'), 'visible');
 });
 
+test('a video inside a shadow root (web-component player, added later) is found, driven, pinned and fullscreen-swallowed', async () => {
+  await load('<p id=other>other</p><div id=host></div>');
+  await settle(300);
+  assert.equal(msgs.filter((m) => m.type === 'videos').length, 0);
+  // Like Joyn's <turbo-video>: the player attaches its shadow root and builds the <video> after load.
+  await page.evaluate(() => { host.attachShadow({ mode: 'open' }).innerHTML = '<div id=wrap style="transform:translateX(3px)"><video id=sv width=640 height=360 src="blob:x"></video></div>'; });
+  await settle(2000);   // no light-DOM change: found by the periodic rescan
+  assert.equal(lastVideos()?.length, 1);
+  assert.equal(lastVideos()[0].w, 640);
+  // A video added to the shadow root later is seen too (the root is observed once found).
+  await page.evaluate(() => { const v = document.createElement('video'); v.id = 'sv2'; v.width = 320; v.height = 180; v.src = 'blob:y'; host.shadowRoot.append(v); });
+  await settle(700);
+  assert.equal(lastVideos().length, 2);
+  await page.evaluate(() => { window.calls = []; const v = host.shadowRoot.querySelector('#sv'); v.play = () => (calls.push('play'), Promise.resolve()); });
+  assert.equal(await page.evaluate(() => __nvCmd(0, 'play')), true);
+  assert.deepEqual(await page.evaluate(() => calls), ['play']);
+  assert.equal(await page.evaluate(() => __nvCmd(0, 'enter')), true);
+  const sh = (sel, prop) => page.evaluate(([s, p]) => getComputedStyle(host.shadowRoot.querySelector(s))[p], [sel, prop]);
+  assert.equal(await sh('#sv', 'position'), 'fixed');
+  assert.equal(await sh('#wrap', 'transform'), 'none');
+  assert.equal(await style('#other', 'visibility'), 'hidden');
+  await page.evaluate(() => __nvCmd(0, 'exit'));
+  assert.equal(await sh('#sv', 'position'), 'static');
+  // The page's fullscreen request from inside the shadow root reaches us.
+  msgs.length = 0;
+  await page.evaluate(() => { host.shadowRoot.querySelector('#sv').requestFullscreen?.() ?? host.shadowRoot.querySelector('#sv').webkitRequestFullscreen?.(); });
+  await settle(200);
+  const fsMsgs = msgs.filter((m) => m.type === 'fullscreen');
+  assert.equal(fsMsgs.length, 1);
+  assert.equal(fsMsgs[0].i, 0);
+});
+
 test('commands drive the element; position updates come fast in video mode', async () => {
   await load('<video id=a width=640 height=360 src="blob:x"></video>');
   await settle(300);

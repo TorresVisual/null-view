@@ -1,7 +1,7 @@
 // Runs in an isolated WKContentWorld, in every frame (decisions.md "JS bridge").
 // Reports the frame's <video> elements to native; native (Core/Video.swift) picks the primary.
 // Plain script, no bundling: Swift loads this file as-is and the Playwright test loads the same file.
-// Not covered (ponytail): videos inside shadow roots. Add a recursive walk if a site needs it.
+// Videos inside open shadow roots are found too (Joyn's <turbo-video>). Closed shadow roots cannot be searched (ponytail).
 (() => {
   if (window.__nvVideoDetect) return;
   window.__nvVideoDetect = true;
@@ -12,6 +12,21 @@
   let timer = 0, due = 0, last = '', everHadVideos = false, fast = false; // fast: video mode wants 4 position updates/s
 
   const post = (m) => window.webkit?.messageHandlers?.nvVideo?.postMessage(JSON.stringify(m)); // native takes a JSON string
+  // Every <video> under root, including those inside open shadow roots, in a stable order (light DOM first).
+  // Report and commands share this, so an index means the same video in both. Each shadow root found is
+  // watched for changes (a MutationObserver on the document does not see into shadow trees).
+  const mo = new MutationObserver(() => schedule(250));
+  const observed = new WeakSet();
+  function deepVideos(root) {
+    const out = root.localName === 'video' ? [root] : [...root.querySelectorAll('video')];
+    for (const e of [root, ...root.querySelectorAll('*')]) {
+      const sr = e.shadowRoot;
+      if (!sr) continue;
+      if (!observed.has(sr)) { observed.add(sr); mo.observe(sr, { childList: true, subtree: true }); }
+      out.push(...deepVideos(sr));
+    }
+    return out;
+  }
   const num = (x) => (Number.isFinite(x) && x >= 0 ? x : null);
 
   function describe(v, i) {
@@ -36,7 +51,7 @@
 
   function report() {
     timer = 0; due = 0;
-    const vids = [...document.querySelectorAll('video')];
+    const vids = deepVideos(document);
     vids.forEach((v) => {
       if (watched.has(v)) return;
       watched.add(v);
@@ -62,7 +77,11 @@
     timer = setTimeout(report, ms);
   }
 
-  new MutationObserver(() => schedule(250)).observe(document, { childList: true, subtree: true });
+  mo.observe(document, { childList: true, subtree: true });
+  // Attaching a shadow root is not a DOM mutation anyone can observe, so a player that builds its shadow tree
+  // after it was inserted would be missed. Rescan now and then; an unchanged report is not re-sent.
+  // ponytail: a full tree walk every 1.5 s. Hook attachShadow in the page world if that ever shows up in a profile.
+  setInterval(() => schedule(0), 1500);
   addEventListener('pagehide', () => post({ type: 'gone', frame }));
   addEventListener('pageshow', () => { last = ''; schedule(0); }); // back/forward cache restore
   addEventListener('resize', () => schedule(250));
@@ -138,7 +157,7 @@
 
   // Native commands, run with evaluateJavaScript in this content world. Returns false if the video is gone.
   window.__nvCmd = (i, cmd, arg) => {
-    const v = document.querySelectorAll('video')[i];
+    const v = deepVideos(document)[i];
     if (!v) return false;
     switch (cmd) {
       case 'enter': fast = true; expand(v); up('expand'); break;
@@ -157,9 +176,9 @@
   // The page-world hook (fullscreen-hook.js) fires this when the page asks for fullscreen. Swallow the
   // request only for a video we can drive; otherwise leave it alone so the page behaves as a plain browser.
   document.addEventListener('nv-fullscreen', (e) => {
-    const t = e.target;
-    const v = t.tagName === 'VIDEO' ? t : t.querySelector?.('video');
-    const i = v ? [...document.querySelectorAll('video')].indexOf(v) : -1;
+    const t = e.composedPath()[0]; // e.target is retargeted to the shadow host
+    const v = t.localName === 'video' ? t : deepVideos(t)[0];
+    const i = v ? deepVideos(document).indexOf(v) : -1;
     if (i < 0 || !(v.currentSrc || v.src || v.srcObject)) return;
     e.preventDefault();
     post({ type: 'fullscreen', frame, i });

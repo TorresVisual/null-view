@@ -9,7 +9,7 @@
     const orig = proto?.[name];
     if (typeof orig !== 'function') return;
     proto[name] = function (...args) {
-      const ev = new CustomEvent('nv-fullscreen', { bubbles: true, cancelable: true });
+      const ev = new CustomEvent('nv-fullscreen', { bubbles: true, composed: true, cancelable: true }); // composed: leaves shadow roots
       this.dispatchEvent(ev);
       return ev.defaultPrevented ? Promise.resolve() : orig.apply(this, args);
     };
