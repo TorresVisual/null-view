@@ -18,6 +18,10 @@ public struct VideoEntry: Equatable, Decodable {
     public let rate: Double?   // playbackRate (optional: older reports lack it)
     public let pip: Bool?      // in picture-in-picture
     public let pj: Bool?       // the page itself called pause() in the last 1.5 s (diagnostic)
+    public let s: String?      // host + path of currentSrc, or "blob" (diagnostic, never acted on)
+    public let ns: Int?        // networkState (diagnostic)
+    public let rs: Int?        // readyState (diagnostic)
+    public let err: Int?       // MediaError code, 0 = none (diagnostic)
 
     /// Big enough to be the thing the user came to watch (filters out trackers and 1x1 probes).
     public static let minArea = 10_000.0
@@ -70,6 +74,7 @@ public enum VideoMessage: Equatable {
 extension VideoEntry {
     fileprivate var isSane: Bool {
         i >= 0 && [w, h, vis, pos].allSatisfy { $0.isFinite && $0 >= 0 } && (dur.map { $0.isFinite && $0 >= 0 } ?? true)
+            && (s?.count ?? 0) <= 100
     }
 }
 

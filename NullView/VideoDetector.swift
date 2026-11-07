@@ -111,18 +111,20 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
         // The other videos on the page (an ad player, a preview): their state is in the key, so they log on change.
         let others = tracker.videos.filter { $0.index != p.index }.map { v -> (state: String, text: String) in
             let o = v.entry
-            let st = "\(o.playing ? "playing" : "paused")\(o.muted ? " muted" : "") \(Int(o.w))x\(Int(o.h)) \(v.isMainFrame ? "main" : "iframe")\(o.src ? "" : " nosrc")\(o.drm ? " drm" : "")"
+            let st = "\(o.playing ? "playing" : "paused")\(o.muted ? " muted" : "") \(Int(o.w))x\(Int(o.h)) \(v.isMainFrame ? "main" : "iframe")\(o.src ? "" : " nosrc")\(o.drm ? " drm" : "") src=\(o.s ?? "-")"
             let od = o.live ? "live" : o.dur.map { String(format: "%.1f", $0) } ?? "?"
             return (st, "#\(v.index) \(st) pos=\(String(format: "%.1f", o.pos)) dur=\(od)")
         }
-        let key = "\(id?.page ?? "?")|\(p.index)|\(e.dur ?? -1)|\(e.playing)|\(e.pj ?? false)|\(tracker.videos.count)|\(others.map { $0.state })"
+        // The source and error are in the key (a change is worth a line); ns/rs flap, so they only show on the 5 s lines.
+        let key = "\(id?.page ?? "?")|\(p.index)|\(e.dur ?? -1)|\(e.playing)|\(e.pj ?? false)|\(e.s ?? "")|\(e.err ?? 0)|\(tracker.videos.count)|\(others.map { $0.state })"
         guard force || why != nil || key != lastLogKey || Date().timeIntervalSince(lastLogTime) >= 5 else { return }
         lastLogKey = key
         lastLogTime = Date()
         let dur = e.live ? "live" : e.dur.map { String(format: "%.1f", $0) } ?? "?"
         note("\(why.map { $0 + ": " } ?? "")video #\(p.index) of \(tracker.videos.count) "
              + "\(p.isMainFrame ? "main" : "iframe") \(Int(e.w))x\(Int(e.h)) "
-             + "\(e.playing ? "playing" : e.pj == true ? "paused-by-page" : "paused") pos=\(String(format: "%.1f", e.pos)) dur=\(dur)\n    \(id?.page ?? "?")"
+             + "\(e.playing ? "playing" : e.pj == true ? "paused-by-page" : "paused") pos=\(String(format: "%.1f", e.pos)) dur=\(dur) ns=\(e.ns ?? -1) rs=\(e.rs ?? -1) err=\(e.err ?? 0)"
+             + "\n    src=\(e.s ?? "-")\n    \(id?.page ?? "?")"
              + (others.isEmpty ? "" : "\n    others: " + others.map { $0.text }.joined(separator: "; ")))
     }
 

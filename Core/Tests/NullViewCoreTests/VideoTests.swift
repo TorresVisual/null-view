@@ -133,6 +133,17 @@ final class VideoGestureTests: XCTestCase {
         XCTAssertNil(VideoMessage.parse(#"{"type":"net","frame":"a","lines":[\#(many)]}"#))
     }
 
+    func testSourceDiagnosticFields() {
+        func parse(_ s: String) -> VideoMessage? {
+            let e = #"{"i":0,"w":640,"h":360,"vis":230400,"playing":false,"ended":false,"muted":false,"loop":false,"dur":null,"pos":0,"live":false,"drm":true,"src":true,"s":"\#(s)","ns":2,"rs":0,"err":0}"#
+            return VideoMessage.parse(#"{"type":"videos","frame":"f","videos":[\#(e)]}"#)
+        }
+        guard case let .videos(_, v)? = parse("cdn.example.com/a.m3u8") else { return XCTFail("rejected") }
+        XCTAssertEqual(v[0].s, "cdn.example.com/a.m3u8")
+        XCTAssertEqual(v[0].ns, 2)
+        XCTAssertNil(parse(String(repeating: "x", count: 101)))                 // over-long source label
+    }
+
     func testFullscreenMessageAndFrameLookup() {
         XCTAssertEqual(VideoMessage.parse(#"{"type":"fullscreen","frame":"a","i":2}"#), .fullscreen(frame: "a", index: 2))
         XCTAssertNil(VideoMessage.parse(#"{"type":"fullscreen","frame":"a"}"#))

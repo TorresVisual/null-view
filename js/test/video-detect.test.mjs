@@ -50,6 +50,15 @@ test('reports every video with size, state and position', async () => {
   assert.equal(v[1].src, false);
 });
 
+test('diagnostic: the source is reported as host + path only (no query), blob as "blob"', async () => {
+  await load(`<video id=a width=640 height=360></video><video id=b width=640 height=360 src="blob:x"></video>`);
+  await fake('#a', { currentSrc: 'https://cdn.example.com/ad/clip.mp4?token=secret', networkState: 2, readyState: 0 }, 'loadstart');
+  await settle();
+  const v = lastVideos();
+  assert.deepEqual([v[0].s, v[0].ns, v[0].rs, v[0].err], ['cdn.example.com/ad/clip.mp4', 2, 0, 0]);
+  assert.equal(v[1].s, 'blob');
+});
+
 test('detects a video added later, and live streams and DRM', async () => {
   await load('<p>hi</p>');
   await settle(400);

@@ -7,7 +7,7 @@
   window.__nvVideoDetect = true;
 
   const frame = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  const EVENTS = ['play', 'playing', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'emptied', 'resize', 'ratechange', 'webkitpresentationmodechanged'];
+  const EVENTS = ['play', 'playing', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'emptied', 'resize', 'ratechange', 'webkitpresentationmodechanged', 'error', 'loadstart', 'stalled', 'abort'];
   const watched = new WeakSet();
   let lastNet = '', timer = 0, due = 0, last = '', everHadVideos = false, fast = false; // fast: video mode wants 4 position updates/s
 
@@ -28,6 +28,8 @@
     return out;
   }
   const num = (x) => (Number.isFinite(x) && x >= 0 ? x : null);
+  // Diagnostic: where the video loads from (host + path only; the query may carry tokens).
+  const srcLabel = (v) => { try { const u = new URL(v.currentSrc || v.src); return u.protocol === 'blob:' ? 'blob' : (u.host + u.pathname).slice(0, 80); } catch (e) { return ''; } };
 
   function describe(v, i) {
     const r = v.getBoundingClientRect();
@@ -43,7 +45,7 @@
       live: v.duration === Infinity,
       drm: !!v.mediaKeys,
       src: !!(v.currentSrc || v.src || v.srcObject),
-      rate: v.playbackRate,
+      rate: v.playbackRate, s: srcLabel(v), ns: v.networkState, rs: v.readyState, err: v.error ? v.error.code : 0,
       pip: v.webkitPresentationMode === 'picture-in-picture',
       pj: Date.now() - Number(document.documentElement.getAttribute('data-nv-pj') || 0) < 1500, // page called pause() just now
     };
