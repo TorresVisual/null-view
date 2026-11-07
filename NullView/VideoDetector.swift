@@ -108,14 +108,22 @@ final class VideoDetector: NSObject, ObservableObject, WKScriptMessageHandler {
         let e = p.entry
         let id = pageURL.map { VideoID(url: $0, index: p.index) }
         // One line per change, plus a position update every 5 s while playing.
-        let key = "\(id?.page ?? "?")|\(p.index)|\(e.dur ?? -1)|\(e.playing)|\(e.pj ?? false)|\(tracker.videos.count)"
+        // The other videos on the page (an ad player, a preview): their state is in the key, so they log on change.
+        let others = tracker.videos.filter { $0.index != p.index }.map { v -> (state: String, text: String) in
+            let o = v.entry
+            let st = "\(o.playing ? "playing" : "paused")\(o.muted ? " muted" : "") \(Int(o.w))x\(Int(o.h)) \(v.isMainFrame ? "main" : "iframe")\(o.src ? "" : " nosrc")\(o.drm ? " drm" : "")"
+            let od = o.live ? "live" : o.dur.map { String(format: "%.1f", $0) } ?? "?"
+            return (st, "#\(v.index) \(st) pos=\(String(format: "%.1f", o.pos)) dur=\(od)")
+        }
+        let key = "\(id?.page ?? "?")|\(p.index)|\(e.dur ?? -1)|\(e.playing)|\(e.pj ?? false)|\(tracker.videos.count)|\(others.map { $0.state })"
         guard force || why != nil || key != lastLogKey || Date().timeIntervalSince(lastLogTime) >= 5 else { return }
         lastLogKey = key
         lastLogTime = Date()
         let dur = e.live ? "live" : e.dur.map { String(format: "%.1f", $0) } ?? "?"
         note("\(why.map { $0 + ": " } ?? "")video #\(p.index) of \(tracker.videos.count) "
              + "\(p.isMainFrame ? "main" : "iframe") \(Int(e.w))x\(Int(e.h)) "
-             + "\(e.playing ? "playing" : e.pj == true ? "paused-by-page" : "paused") pos=\(String(format: "%.1f", e.pos)) dur=\(dur)\n    \(id?.page ?? "?")")
+             + "\(e.playing ? "playing" : e.pj == true ? "paused-by-page" : "paused") pos=\(String(format: "%.1f", e.pos)) dur=\(dur)\n    \(id?.page ?? "?")"
+             + (others.isEmpty ? "" : "\n    others: " + others.map { $0.text }.joined(separator: "; ")))
     }
 
     func note(_ s: String) {
