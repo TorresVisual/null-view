@@ -161,6 +161,9 @@ public enum Filters {
                    url: URL(string: "https://filters.adtidy.org/ios/filters/18_optimized.txt")!),
         FilterList(id: "adguard-popups", name: "AdGuard Popups",
                    url: URL(string: "https://filters.adtidy.org/ios/filters/19_optimized.txt")!),
+        // Regional list: carries Joyn's ad hosts and ad-pod requests, which the general lists leave alone.
+        FilterList(id: "adguard-german", name: "AdGuard German",
+                   url: URL(string: "https://filters.adtidy.org/ios/filters/6_optimized.txt")!),
     ]
 
     public static let builtIn = defaults + optional
