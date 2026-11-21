@@ -166,12 +166,26 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
     // MARK: SPIKE (#17), temporary: what JSON does the page load for an artist's albums and one album's chapters?
 
     private var spiking = false
+    private var spikeLog: [String] = []
+
+    /// Logs a SPIKE line and keeps it for the clipboard (the log view shows only the last 15 lines).
+    private func spikeNote(_ s: String) {
+        note(s)
+        spikeLog.append(s)
+    }
 
     /// Open an artist page in the player first, then tap SPIKE. Every step is logged with "SPIKE".
     func runSpike() {
         guard !spiking else { return }
         spiking = true
-        Task { await spike(); spiking = false }
+        spikeLog = []
+        Task {
+            await spike()
+            spiking = false
+            UIPasteboard.general.string = spikeLog.joined(separator: "
+")
+            note("SPIKE copied \(spikeLog.count) lines to the clipboard")
+        }
     }
 
     private func js(_ s: String) async -> String {
@@ -180,7 +194,7 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
     }
 
     private func spikeLoad(_ url: URL) async {
-        note("SPIKE load \(url.absoluteString)")
+        spikeNote("SPIKE load \(url.absoluteString)")
         requested = url
         webView.load(URLRequest(url: url))
         try? await Task.sleep(for: .seconds(1))
@@ -194,15 +208,15 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
     /// One log line per recorded JSON response (see js/src/spotify-spy.js), then the recorder is empty again.
     private func spikeDrain(_ label: String) async {
         let raw = (try? await webView.evaluateJavaScript("window.__nvSpy ? window.__nvSpy.drain() : []")) as? [String] ?? []
-        note("SPIKE \(label): \(raw.count) JSON responses")
-        for r in raw { note("SPIKE spy \(r)") }
+        spikeNote("SPIKE \(label): \(raw.count) JSON responses")
+        for r in raw { spikeNote("SPIKE spy \(r)") }
     }
 
     private func spike() async {
         let parts = (webView.url?.path ?? "").split(separator: "/").map(String.init)
         guard let i = parts.firstIndex(of: "artist"), i + 1 < parts.count,
               let discography = URL(string: "/artist/\(parts[i + 1])/discography/all", relativeTo: webView.url)?.absoluteURL else {
-            note("SPIKE stop: open an artist page (/artist/<id>) in the player first")
+            spikeNote("SPIKE stop: open an artist page (/artist/<id>) in the player first")
             return
         }
         _ = try? await webView.evaluateJavaScript("window.__nvSpy ? window.__nvSpy.drain().length : 0")  // discard what the current page recorded
@@ -223,7 +237,7 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
                 """)
             same = r == last ? same + 1 : 0
             last = r
-            note("SPIKE scroll \(n): \(r)")
+            spikeNote("SPIKE scroll \(n): \(r)")
             if same >= 3 { break }  // the count stopped growing
             try? await Task.sleep(for: .seconds(1.5))
         }
@@ -232,7 +246,7 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         // 2. One album's chapters, from the first album link on the page.
         let href = await js("(() => { const a = (document.querySelector('main') || document).querySelector('a[href*=\"/album/\"]'); return a ? a.getAttribute('href') : ''; })()")
         guard !href.isEmpty, let album = URL(string: href, relativeTo: webView.url)?.absoluteURL else {
-            note("SPIKE stop: no album link found on the discography page")
+            spikeNote("SPIKE stop: no album link found on the discography page")
             return
         }
         await spikeLoad(album)
@@ -241,24 +255,24 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
             (() => { const r = [...document.querySelectorAll('[data-testid="tracklist-row"]')];
               return r.length + ' rendered: ' + r.slice(0, 40).map(x => x.textContent.slice(0, 50)).join(' | '); })()
             """)
-        note("SPIKE rows: " + rows)
+        spikeNote("SPIKE rows: " + rows)
 
         // 3. Play it and see whether the next track follows in order.
         let play = await js("""
             (() => { const b = document.querySelector('[data-testid="action-bar-row"] [data-testid="play-button"]') || document.querySelector('main [data-testid="play-button"]');
               if (!b) return 'play button NOT found'; b.click(); return 'play button clicked, label=' + (b.getAttribute('aria-label') || ''); })()
             """)
-        note("SPIKE play: " + play)
+        spikeNote("SPIKE play: " + play)
         try? await Task.sleep(for: .seconds(5))
         let afterPlay = await js("window.__nv ? window.__nv.state() : 'no hook'")
-        note("SPIKE after play: " + afterPlay)
+        spikeNote("SPIKE after play: " + afterPlay)
         let next = await js("window.__nv ? window.__nv.cmd('nexttrack') : 'no hook'")
-        note("SPIKE next: " + next)
+        spikeNote("SPIKE next: " + next)
         try? await Task.sleep(for: .seconds(4))
         let afterNext = await js("window.__nv ? window.__nv.state() : 'no hook'")
-        note("SPIKE after next: " + afterNext)
+        spikeNote("SPIKE after next: " + afterNext)
         await spikeDrain("playback")
-        note("SPIKE done")
+        spikeNote("SPIKE done")
     }
 
     func webView(_ w: WKWebView, createWebViewWith cfg: WKWebViewConfiguration,

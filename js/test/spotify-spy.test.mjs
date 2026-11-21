@@ -24,6 +24,7 @@ before(async () => {
   await context.route('https://spclient.wg.spotify.com/**', (r) => r.fulfill({
     contentType: 'application/json', headers: cors, body: JSON.stringify({ tracks: [TRACK] }),
   }));
+  await context.route('https://gew4-spclient.spotify.com/**', (r) => r.fulfill({ contentType: 'application/json', headers: cors, body: '{"ok":true}' }));
   await context.route('https://other.test/**', (r) => r.fulfill({ contentType: 'application/json', headers: cors, body: '{"a":1}' }));
   await context.route('https://api.spotify.com/text', (r) => r.fulfill({ contentType: 'text/plain', headers: cors, body: 'nope' }));
   await context.addInitScript({ path: SCRIPT });
@@ -83,6 +84,18 @@ test('XHR is recorded too', async () => {
 test('other hosts and non-JSON responses are ignored', async () => {
   await page.evaluate(async () => { await fetch('https://other.test/x'); await fetch('https://api.spotify.com/text'); });
   assert.deepEqual(await drain(), []);
+});
+
+test('telemetry and library/curation polling are skipped so they do not use up the cap', async () => {
+  await page.evaluate(async () => {
+    await fetch('https://gew4-spclient.spotify.com/gabo-receiver-service/v3/events', { method: 'POST', body: '{}' });
+    await fetch('https://gew4-spclient.spotify.com/melody/v1/msg/batch', { method: 'POST', body: '{}' });
+    await fetch('https://api-partner.spotify.com/pathfinder/v2/query', { method: 'POST', body: '{"operationName":"areEntitiesInLibrary"}' });
+    await fetch('https://api-partner.spotify.com/pathfinder/v2/query', { method: 'POST', body: '{"operationName":"getAlbum"}' });
+  });
+  const rs = await drain();
+  assert.equal(rs.length, 1);
+  assert.match(rs[0].req, /getAlbum/);
 });
 
 test('the same URL is recorded once and the total is capped', async () => {

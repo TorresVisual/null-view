@@ -6,6 +6,8 @@
 // ponytail: fetch/XHR on the main thread only; not workers. Cap 30 records per document, one per method+URL+request body.
 (() => {
   const HOST = /(^|\.)spotify\.com$/, MAX = 30, HEAD = 500;
+  // Telemetry and per-track library/curation polling: seen in the first phone log, they filled the cap and the log.
+  const NOISE = /gabo-receiver|\/melody\/|storage-resolve|collection\/v2\/contains|\/event-sender|areEntitiesInLibrary|isCurated/;
   const recs = [], seen = new Set();
 
   // Follow single-key objects ({data:{artistUnion:{...}}}) so `keys` describes the useful level, not just "data".
@@ -48,7 +50,7 @@
     try { u = new URL(url, location.href); } catch (e) { return; }
     if (!HOST.test(u.hostname) || !/json/i.test(ct || '')) return;
     const shown = u.host + u.pathname + u.search, key = method + shown + req;
-    if (recs.length >= MAX || seen.has(key)) return;
+    if (recs.length >= MAX || seen.has(key) || NOISE.test(shown + ' ' + req)) return;
     seen.add(key);
     const uris = new Set(text.match(/spotify:(?:album|track):[A-Za-z0-9]{22}/g) || []);
     const count = (kind) => [...uris].filter((s) => s.startsWith('spotify:' + kind + ':')).length;
