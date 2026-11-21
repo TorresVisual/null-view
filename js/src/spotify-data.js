@@ -8,6 +8,7 @@
 (() => {
   const HOST = /(^|\.)spotify\.com$/, MAX = 100;
   const OPS = /operationName["=:\s]+"?(queryArtistDiscographyAll|queryArtistDiscographyOverview|getAlbum)\b/;
+  const OPNAME = /operationName["=:\s]+"?(\w+)/, seenOps = new Set();
   const recs = [];
 
   const record = (url, req, ct, text) => {
@@ -16,8 +17,17 @@
     try { u = new URL(url, location.href); } catch (e) { return; }
     if (!HOST.test(u.hostname)) return;
     const m = OPS.exec(req + ' ' + u.search);   // POST: the operation lives in the body; GET: in the query string
-    if (!m) return;
-    recs.push({ op: m[1], text });
+    let op = m && m[1];
+    if (!op) {
+      // Say once per operation name which others the page uses, and take a response that carries an album's chapters
+      // under another name: chapters 51 and up of a long album never arrived, and the log showed the page at the end of
+      // its list, so the rest most likely comes as a separate operation that was being ignored.
+      const any = OPNAME.exec(req + ' ' + u.search);
+      if (any && !seenOps.has(any[1]) && seenOps.size < 40) { seenOps.add(any[1]); stopLog.push(`api operation ${any[1]}`); }
+      if (/"albumUnion"/.test(text) && /"tracksV2"/.test(text)) op = 'getAlbum';
+    }
+    if (!op) return;
+    recs.push({ op, text });
     if (recs.length > MAX) recs.shift();
   };
 

@@ -17,6 +17,8 @@ before(async () => {
   await context.route('https://api-partner.spotify.com/**', (r) => {
     if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
     const op = /operationName["=:]+\s*"?(\w+)/.exec(r.request().postData() || r.request().url())?.[1] ?? '?';
+    // A paging operation under another name, answered with the shape of an album's chapters.
+    if (op === 'queryAlbumTracks') return r.fulfill({ contentType: 'application/json', headers: cors, body: '{"data":{"albumUnion":{"tracksV2":{"totalCount":61,"items":[]}}}}' });
     return r.fulfill({ contentType: 'application/json', headers: cors, body: JSON.stringify({ data: { op, pad: 'x'.repeat(3000) } }) });
   });
   await context.route('https://other.test/**', (r) => r.fulfill({ contentType: 'application/json', headers: cors, body: '{"a":1}' }));
@@ -48,6 +50,12 @@ test('other operations, other hosts and non-JSON responses are ignored', async (
   await post('areEntitiesInLibrary');
   await page.evaluate(async () => { await fetch('https://other.test/x'); await fetch('https://api.spotify.com/text'); });
   assert.deepEqual(await drain(), []);
+});
+
+test('chapters arriving under another operation name are recorded as getAlbum, and the name is logged once', async () => {
+  await post('queryAlbumTracks'); await post('queryAlbumTracks'); await post('areEntitiesInLibrary');
+  assert.deepEqual((await drain()).map((r) => r.op), ['getAlbum', 'getAlbum']);   // not the unrelated operation
+  assert.deepEqual(await page.evaluate(() => window.__nvSpotify.takeLog()), ['api operation queryAlbumTracks', 'api operation areEntitiesInLibrary']);
 });
 
 test('the operation name in the URL (GET) is recognised too', async () => {
