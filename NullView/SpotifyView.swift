@@ -167,10 +167,41 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         return ["http", "https", "about", "blob"].contains(scheme) ? .allow : .cancel
     }
 
+    // MARK: Release (issue #23)
+
+    /// The page last shown before `releaseIfPaused` blanked it, for `restore`.
+    private var releasedURL: URL?
+    var isReleased: Bool { webView.url?.absoluteString == "about:blank" }
+
+    /// A paused page still runs a full desktop Spotify at 1950 px with throttling off, so on Done and on leaving the
+    /// app it is blanked. Playing audio is never touched. A page that cannot say it is paused (no hook, still
+    /// loading) or that a fetch or a play click is using is kept; the next event looks again.
+    func releaseIfPaused(_ why: String) {
+        guard let url = webView.url, !isReleased, !catalog.isBusy else { return }
+        webView.evaluateJavaScript("window.__nv ? window.__nv.state() : ''") { [weak self] r, _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.catalog.isBusy, let s = (r as? String).flatMap({ SpotifyPlayerState(json: $0) }), !s.playing else { return }
+                self.releasedURL = url
+                self.requested = nil
+                self.webView.load(URLRequest(url: URL(string: "about:blank")!))
+                self.note("spotify released page (\(why))")
+            }
+        }
+    }
+
+    /// Reloads the page `releaseIfPaused` blanked, for playback that did not start from the native screens.
+    func restore() {
+        guard let url = releasedURL else { return }
+        requested = url
+        webView.load(URLRequest(url: url))
+        note("spotify restored page")
+    }
+
     // MARK: Controls
 
     /// "playpause", "nexttrack" or "previoustrack". Logged with the path taken, so a broken hook shows in the log.
     func send(_ action: String) {
+        if action == "playpause", isReleased { catalog.resume(); return }   // nothing to click: bring the album back first
         webView.evaluateJavaScript("window.__nv ? window.__nv.cmd('\(action)') : 'no hook'") { [weak self] r, _ in
             MainActor.assumeIsolated {
                 self?.note("spotify \(action) -> \(r as? String ?? "?")")
@@ -185,10 +216,9 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         canGoForward = webView.canGoForward
         webView.evaluateJavaScript("window.__nv ? window.__nv.state() : ''") { [weak self] r, _ in
             MainActor.assumeIsolated {
-                guard let self, let s = r as? String, let d = s.data(using: .utf8),
-                      let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return }
-                self.playing = o["playing"] as? Bool ?? false
-                self.title = o["title"] as? String ?? ""
+                guard let self, let s = (r as? String).flatMap({ SpotifyPlayerState(json: $0) }) else { return }
+                self.playing = s.playing
+                self.title = s.title
             }
         }
         // Lines the page wrote while nobody was looking (the stop at an album's end, issue #20).
@@ -248,7 +278,7 @@ struct SpotifyOverlay: View {
                 }
                 Spacer(minLength: 0)
                 glassIcon(player.showPage ? "square.grid.2x2" : "globe", player.showPage ? "Show albums" : "Show Spotify page") { player.showPage.toggle() }
-                Button { show = false } label: {
+                Button { show = false; player.releaseIfPaused("done") } label: {
                     Text("Done").foregroundStyle(Color.accentColor).padding(.horizontal, Theme.gap).frame(minHeight: Theme.hit)
                 }
                 .buttonStyle(.glass).buttonBorderShape(.capsule)

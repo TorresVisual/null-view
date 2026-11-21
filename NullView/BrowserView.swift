@@ -55,6 +55,9 @@ struct BrowserView: View {
         .onChange(of: scenePhase) { _, p in
             detector.note("app \(p)")
             if p != .active { watch.flush() }
+            // Issue #23. Not .inactive: Control Center and alerts pass through it. On return, the page may have been paused
+            // from the lock screen after the background check; with the overlay open the user is looking at it, so leave it.
+            if p == .background || (p == .active && !model.showSpotify) { model.spotify.releaseIfPaused(p == .background ? "background" : "foreground") }
             if p == .active { checkClipboard(); Task { await blocker.refreshIfStale() } }
         }
         .onAppear { checkClipboard() }

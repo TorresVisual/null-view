@@ -54,6 +54,19 @@ final class SpotifyDisplayTests: XCTestCase {
         XCTAssertEqual(SpotifyNowPlaying("").chapter, "")
     }
 
+    /// Issue #23: the page's `__nv.state()` string. An empty or broken one (no hook, page not loaded) is nil, which the
+    /// release check reads as "not known to be paused", so the page is kept.
+    func testPlayerStateReadsPlayingAndTitleAndRejectsAnythingElse() {
+        let paused = SpotifyPlayerState(json: #"{"playing":false,"title":"Teil 01"}"#)
+        XCTAssertEqual(paused?.playing, false)
+        XCTAssertEqual(paused?.title, "Teil 01")
+        XCTAssertEqual(SpotifyPlayerState(json: #"{"playing":true,"title":""}"#)?.playing, true)
+        XCTAssertEqual(SpotifyPlayerState(json: #"{"playing":true}"#)?.title, "", "a missing title is empty")
+        for bad in ["", "no hook", "[]", #"{"title":"x"}"#] {
+            XCTAssertNil(SpotifyPlayerState(json: bad), bad)
+        }
+    }
+
     func testChapterTitleStaysWholeWhenItDoesNotStartWithTheAlbumName() {
         let a = album("Folge 223: und der Knochenmann")
         XCTAssertEqual(chapter("Teil 01").displayTitle(in: a), "Teil 01")

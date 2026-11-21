@@ -41,6 +41,20 @@ public struct SpotifyNowPlaying: Equatable {
     }
 }
 
+/// What the page's `__nv.state()` returns (issue #23). nil for anything that is not that JSON (no hook, page not
+/// loaded), so a caller never mistakes "unknown" for "paused".
+public struct SpotifyPlayerState: Equatable {
+    public let playing: Bool
+    public let title: String
+
+    public init?(json: String) {
+        guard let d = json.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let playing = o["playing"] as? Bool else { return nil }
+        self.playing = playing
+        title = o["title"] as? String ?? ""
+    }
+}
+
 extension SpotifyChapter {
     /// The title without the album's name in front, as Spotify lists these: "223 - und der Knochenmann - Teil 01"
     /// becomes "Teil 01". Only when the title starts with this album's name (and its number, if any) followed by a

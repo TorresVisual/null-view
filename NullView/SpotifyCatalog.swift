@@ -59,6 +59,10 @@ final class SpotifyCatalog: ObservableObject {
     private var complete: [String: [SpotifyChapter]] = [:]   // chapter lists that reached their full count, by album id
 
     private var nowPlaying: SpotifyAlbum?   // the album last played from here; its last chapter marks it listened
+    /// Play tasks still running (a cancelled one counts until it unwinds). With a fetch under way it means the page
+    /// is in use, so the player does not release it (issue #23).
+    private var working = 0
+    var isBusy: Bool { working > 0 || grid.isLoading || detail.isLoading }
     private var titleWatch: AnyCancellable?
 
     init(player: SpotifyPlayer) {
@@ -239,7 +243,9 @@ final class SpotifyCatalog: ObservableObject {
         guard let album else { return }
         task?.cancel()
         nowPlaying = album
+        working += 1   // before the task starts, so a Done right after the tap already sees the page in use
         task = Task {
+            defer { working -= 1 }
             await showAlbumPage(album)
             for _ in 0..<40 {
                 let r = await player.call("return window.__nvSpotify ? window.__nvSpotify.playChapter(uri, number) : 'no recorder'",
@@ -260,9 +266,21 @@ final class SpotifyCatalog: ObservableObject {
     /// The album's own play button: Spotify resumes where it left off, which suits audiobooks.
     func playAlbum() {
         guard let album else { return }
+        startAlbum(album)
+    }
+
+    /// The capsule's play after the player released its page (issue #23): the album last played from here, or the
+    /// page that was open when it was released, which then has its own play button.
+    func resume() {
+        if let nowPlaying { startAlbum(nowPlaying) } else { player.restore() }
+    }
+
+    private func startAlbum(_ album: SpotifyAlbum) {
         task?.cancel()
         nowPlaying = album
+        working += 1
         task = Task {
+            defer { working -= 1 }
             await showAlbumPage(album)
             let r = await player.eval("window.__nvSpotify ? window.__nvSpotify.playAlbum() : 'no recorder'") as? String ?? "?"
             player.note("spotify album play -> \(r)")
