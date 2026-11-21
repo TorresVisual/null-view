@@ -85,6 +85,23 @@ test('scrollStep moves every scrollable element in main, not just the tallest', 
   assert.deepEqual(await page.evaluate(() => [document.querySelector('main').scrollTop, document.getElementById('in').scrollTop]), [100, 75]);
 });
 
+test('scrollStep finds a scroller that is an ancestor of main, and leaves a non-scrolling main alone', async () => {
+  await page.setContent(`<div id="outer" style="height:300px;overflow:auto"><main style="height:100px"><div style="height:2000px"></div></main></div>`);
+  const r = await page.evaluate(() => [window.__nvSpotify.scrollStep(), document.getElementById('outer').scrollTop]);
+  assert.equal(r[0], 'step top=150 of 2000 client=300 el=div#outer');
+  assert.equal(r[1], 150);
+});
+
+test('scrollTo puts the scroller at a fraction of its range, for any scroller around main', async () => {
+  await page.setContent(`<div id="outer" style="height:300px;overflow:hidden"><main><div style="height:1300px"></div></main></div>`);
+  const r = await page.evaluate(() => [window.__nvSpotify.scrollTo(0.5), document.getElementById('outer').scrollTop]);
+  assert.equal(r[1], 500);                                  // 0.5 * (1300 - 300)
+  assert.match(r[0], /^top=500 of 1300 client=300 el=div#outer$/);
+  assert.equal(await page.evaluate(() => window.__nvSpotify.scrollTo(2)), 'top=1000 of 1300 client=300 el=div#outer');   // clamped to the end
+  await page.setContent('<p>nothing scrolls</p>');
+  assert.equal(await page.evaluate(() => window.__nvSpotify.scrollTo(0.5)), 'none');
+});
+
 test('playChapter clicks the row found by its track link, falls back to the row index, and says when it is not rendered', async () => {
   await page.setContent(`<main>
     <div data-testid="tracklist-row" aria-rowindex="2"><a href="/track/AAA">Teil 1</a><button aria-label="Play Teil 1" onclick="window.hit='A'"></button></div>

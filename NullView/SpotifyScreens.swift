@@ -26,17 +26,23 @@ private struct AlbumGridView: View {
             status
             if catalog.albums.isEmpty {
                 Spacer()
+                if catalog.grid.isLoading { ProgressView().controlSize(.large) }
+                Spacer()
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: Theme.gap) {
                         ForEach(catalog.albums) { album in
                             Button { catalog.open(album) } label: { tile(album) }
                                 .buttonStyle(.plain)
-                                .disabled(catalog.grid.isLoading)   // the fetch owns the hidden page until it is done
                                 .accessibilityLabel("\(album.name), \(album.year)")
+                                .onAppear { if catalog.isNearEnd(album) { catalog.loadMore() } }
                         }
                     }
                     .padding(Theme.pad)
+                    if let total = catalog.albumTotal, catalog.albums.count < total {
+                        Text("\(catalog.albums.count) of \(total) albums. More load as you scroll.")
+                            .font(.footnote).foregroundStyle(.secondary).padding(.bottom, Theme.pad)
+                    }
                 }
             }
         }

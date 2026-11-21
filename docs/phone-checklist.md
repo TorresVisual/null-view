@@ -44,8 +44,8 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] The Sites button in the bottom toolbar opens the same grid as a sheet; tapping a tile closes it and loads the site.
 
 ## Spotify
-- [ ] Open `https://open.spotify.com` after visiting YouTube (log in with the free account first if asked, via the globe button): the overlay shows the album grid of Die drei ??? with covers (no empty tiles), a "Loading albums n of 313" line while it fills, and no tile is disabled afterwards. Settings log has no `spotify format changed`.
-- [ ] Count: scroll the grid to the bottom and check the last (oldest) albums are there. 313 albums, no gaps (spot-check a few old ones around "Folge 20" to "Folge 40"). A fast fling at any point must not leave holes.
+- [ ] Open `https://open.spotify.com` after visiting YouTube (log in with the free account first if asked, via the globe button): the overlay shows the album grid of Die drei ??? with covers (no empty tiles) within a few seconds, about 140 albums, tappable at once. A footer says "n of 313 albums. More load as you scroll." Settings log has no `spotify format changed`.
+- [ ] Scroll the grid down: near the end more albums load ("Loading more albums…", log lines `spotify albums n/313, scrollTo …`), until all 313 are there and the footer is gone. Spot-check a few old albums for gaps (around "Folge 20" to "Folge 40"). Fling to the bottom: it must still end at 313, no holes.
 - [ ] Tap an album: chapters appear with number, title and duration. Tap the 54-chapter Adventskalender: all 54 are listed (if the list stops short, a line says "Showing n of 54 chapters": send the log).
 - [ ] Tap a chapter: it plays, the bottom bar shows its title. Next and previous in the bottom bar move in order. Settings log shows `spotify chapter N -> row button` (or `row dblclick`). Try one chapter far down a long album.
 - [ ] "Play, or resume where you left off" starts where Spotify last was. Lock the screen: playback continues into the next chapter. Settings log shows `private pref ... applied`.

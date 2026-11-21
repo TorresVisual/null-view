@@ -21,6 +21,7 @@ enum SpotifyPhase: Equatable {
 final class SpotifyCatalog: ObservableObject {
     @Published private(set) var grid: SpotifyPhase = .idle
     @Published private(set) var albums: [SpotifyAlbum] = []
+    @Published private(set) var albumTotal: Int?
     @Published private(set) var album: SpotifyAlbum?
     @Published private(set) var detail: SpotifyPhase = .idle
     @Published private(set) var chapters: [SpotifyChapter] = []
@@ -35,42 +36,64 @@ final class SpotifyCatalog: ObservableObject {
 
     private unowned let player: SpotifyPlayer
     private var task: Task<Void, Never>?
+    private var artist = SpotifyArtistPage()   // everything read so far; the grid shows it newest first
     private var complete: [String: [SpotifyChapter]] = [:]   // chapter lists that reached their full count, by album id
 
     init(player: SpotifyPlayer) { self.player = player }
 
     // MARK: Album grid
 
-    /// Opens the artist's discography in the hidden player and scrolls it until every album has been seen.
+    private static let discographyURL = URL(string: "https://open.spotify.com/artist/\(SpotifyLink.artistID)/discography/all")!
+    /// The page loads this many albums by itself (7 pages of 20); the rest only when the grid is scrolled to them.
+    private var onDiscography: Bool { player.webView.url?.path.contains("/discography") == true }
+
+    /// First load: opens the discography in the hidden player and lets it settle. Does not scroll.
     func loadAlbums() {
         guard !grid.isLoading, grid != .ready else { return }
         task?.cancel()
         task = Task { await fetchAlbums() }
     }
 
+    /// Called when the grid's last tiles scroll into view. Positions the hidden page at the next unread albums.
+    func loadMore() {
+        guard album == nil, grid == .ready, !artist.albums.isEmpty, !artist.isComplete else { return }
+        task?.cancel()
+        task = Task { await fetchAlbums() }
+    }
+
+    func isNearEnd(_ a: SpotifyAlbum) -> Bool { albums.suffix(12).contains { $0.id == a.id } }
+
     private func fetchAlbums() async {
-        grid = .loading("Opening Spotify…")
+        let first = artist.albums.isEmpty
+        grid = .loading(first ? "Opening Spotify…" : "Loading more albums…")
         _ = await drain()
-        await player.load(URL(string: "https://open.spotify.com/artist/\(SpotifyLink.artistID)/discography/all")!)
-        var artist = SpotifyArtistPage()
-        var stale = 0
-        var lastScroll = ""
-        for step in 0..<200 {
+        if first || !onDiscography { await player.load(Self.discographyURL) }
+        let start = artist.albums.count
+        var stale = 0, lastScroll = ""
+        for step in 0..<40 {
             let before = artist.albums.count
             do {
                 for r in await drain() where r.op != "getAlbum" { artist.add(try SpotifyDecoder.discography(Data(r.text.utf8))) }
             } catch { return fail(&grid, error) }
             albums = artist.sorted
-            // Stop only on Spotify's own count: the page list is virtualized, and "links stopped changing" lost 40 albums in the spike.
+            albumTotal = artist.total
             if artist.isComplete { grid = .ready; return }
             stale = artist.albums.count == before ? stale + 1 : 0
-            if step >= 10, artist.total == nil { return fail(&grid, SpotifyFormatError(missing: "discography totalCount")) }
-            if stale >= 25 { grid = .failed("Got \(artist.albums.count) of \(artist.total ?? 0) albums (last scroll: \(lastScroll))."); return }
-            grid = .loading(artist.total.map { "Loading albums \(artist.albums.count) of \($0)" } ?? "Loading albums…")
-            lastScroll = await scrollStep("albums \(artist.albums.count)/\(artist.total ?? 0)")
-            guard await pause(1.2) else { return }
+            if step >= 12, artist.total == nil { return fail(&grid, SpotifyFormatError(missing: "discography totalCount")) }
+            if first {
+                // The first batch comes by itself; once it stops growing, show it and wait for the user to scroll.
+                if !artist.albums.isEmpty, artist.total != nil, stale >= 3 { grid = .ready; return }
+                if stale >= 25 { grid = .failed("Spotify sent no albums."); return }
+            } else {
+                // Not "links stopped changing" as the end: Spotify's own total decides completeness (isComplete).
+                if artist.albums.count - start >= 40 { grid = .ready; return }
+                if stale >= 8 { grid = .failed("No more albums came back (\(artist.albums.count) of \(artist.total ?? 0); last scroll: \(lastScroll))."); return }
+                // The unread albums sit at about count/total of the way down the page's list.
+                lastScroll = await scrollTo(Double(artist.albums.count) / Double(max(artist.total ?? 1, 1)), "albums \(artist.albums.count)/\(artist.total ?? 0)")
+            }
+            guard await pause(1.0) else { return }
         }
-        grid = .failed("Got \(artist.albums.count) of \(artist.total ?? 0) albums.")
+        grid = first && !artist.albums.isEmpty ? .ready : .failed("Stopped after \(artist.albums.count) of \(artist.total ?? 0) albums.")
     }
 
     // MARK: Chapters
@@ -78,6 +101,7 @@ final class SpotifyCatalog: ObservableObject {
     func open(_ album: SpotifyAlbum) {
         self.album = album
         task?.cancel()
+        if grid.isLoading { grid = .ready }   // the fetch just got cancelled; scrolling the grid resumes it
         detailNote = ""
         if let done = complete[album.id] { chapters = done; detail = .ready; return }
         chapters = []
@@ -170,6 +194,14 @@ final class SpotifyCatalog: ObservableObject {
             guard let op = r["op"], let text = r["text"] else { return nil }
             return (op, text)
         }
+    }
+
+    /// Puts the page's list at `f` of its range; returns where it ended up (and logs it).
+    @discardableResult
+    private func scrollTo(_ f: Double, _ what: String) async -> String {
+        let r = await player.eval("window.__nvSpotify ? window.__nvSpotify.scrollTo(\(f)) : 'no recorder'") as? String ?? "?"
+        player.note("spotify \(what), scrollTo \(String(format: "%.2f", f)): \(r)")
+        return r
     }
 
     /// One scroll step; returns where the scroller is (see `scrollStep` in spotify-data.js) and logs it with the counts.

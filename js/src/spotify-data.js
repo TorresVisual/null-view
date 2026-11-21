@@ -45,16 +45,20 @@
     return xSend.apply(this, arguments);
   };
 
-  // The page lists are virtualized and page in as they are scrolled, so the fetcher scrolls in steps (a jump
-  // skipped offsets 140 to 180 in the spike). Every scrollable element in main moves, because which one the
-  // page watches is Spotify's business; the tallest one decides when the end is reached.
+  // The page lists are virtualized and page in as they are scrolled (a jump skipped offsets 140 to 180 in the
+  // spike). Which element the page watches is Spotify's business, and it is an ANCESTOR of main as often as
+  // a child (a search inside main alone found nothing on the phone), so every scroller around main moves.
+  // Ancestors may be overflow:hidden (still scrollable by script); inside main only auto/scroll counts.
+  // The one with the longest range decides when the end is reached.
   const scrollers = () => {
     const root = document.querySelector('main') || document.body;
-    const all = [root, ...root.querySelectorAll('*')].filter((e) => e.scrollHeight > e.clientHeight + 50 && /auto|scroll/.test(getComputedStyle(e).overflowY));
+    const scrolls = (e, re) => e.scrollHeight > e.clientHeight + 50 && re.test(getComputedStyle(e).overflowY);
+    const all = [...document.querySelectorAll('*')].filter((e) => (e.contains(root) ? scrolls(e, /auto|scroll|hidden/) : root.contains(e) && scrolls(e, /auto|scroll/)));
     const doc = document.scrollingElement;
     if (doc && doc.scrollHeight > doc.clientHeight + 50) all.push(doc);
     return all;
   };
+  const longest = (els) => els.reduce((a, e) => (e.scrollHeight - e.clientHeight > a.scrollHeight - a.clientHeight ? e : a));
   const describe = (e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.classList[0] ? '.' + e.classList[0] : '');
 
   const rowFor = (uri, number) => {
@@ -70,10 +74,19 @@
     scrollStep() {
       const els = scrollers();
       if (!els.length) return 'none';
-      const main = els.reduce((a, e) => (e.scrollHeight > a.scrollHeight ? e : a));
+      const main = longest(els);
       const end = main.scrollTop + main.clientHeight >= main.scrollHeight - 2;
       for (const e of els) e.scrollTop = end ? 0 : e.scrollTop + e.clientHeight * 0.5;
       return `${end ? 'wrapped' : 'step'} top=${Math.round(main.scrollTop)} of ${main.scrollHeight} client=${main.clientHeight} el=${describe(main)}`;
+    },
+    /** Every scroller to `f` (0 to 1) of its range: the list's items sit at about their index / total of the way down.
+     *  Returns where the longest one ended up, or 'none'. */
+    scrollTo(f) {
+      const els = scrollers();
+      if (!els.length) return 'none';
+      for (const e of els) e.scrollTop = Math.min(1, Math.max(0, f)) * (e.scrollHeight - e.clientHeight);
+      const main = longest(els);
+      return `top=${Math.round(main.scrollTop)} of ${main.scrollHeight} client=${main.clientHeight} el=${describe(main)}`;
     },
     /** Plays that chapter's row. Returns which way it was clicked, or why not ('not rendered': scroll and retry). */
     playChapter(uri, number) {
