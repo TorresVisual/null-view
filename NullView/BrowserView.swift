@@ -32,7 +32,7 @@ struct BrowserView: View {
                 WebViewHost(webView: model.webView)
                 if videoMode.active { VideoModeView(mode: videoMode) }
                 else if let f = model.failure { errorView(f.message) }
-                else if model.url == nil && !model.isLoading { startView }
+                else if showSites || (model.url == nil && !model.isLoading) { startView }
                 else if detector.button == .enabled { videoButton }
             }
             banner
@@ -46,10 +46,11 @@ struct BrowserView: View {
         .statusBarHidden(videoMode.active)
         .persistentSystemOverlays(videoMode.active ? .hidden : .automatic)
         .sheet(isPresented: $showLibrary) { LibraryView(model: model) }
-        .sheet(isPresented: $showSites) { SitesSheet(model: model) }
         .overlay { SpotifyOverlay(player: model.spotify, show: $model.showSpotify) }
         .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker, detector: detector) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
+        // Any navigation (site tile, address bar, deep link, clipboard) leaves the Sites page.
+        .onChange(of: model.isLoading) { _, loading in if loading { showSites = false } }
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }
         .onChange(of: scenePhase) { _, p in
             detector.note("app \(p)")
@@ -134,7 +135,7 @@ struct BrowserView: View {
             }
             .disabled(model.url == nil)
             Spacer()
-            tool("square.grid.2x2", "Sites") { showSites = true }
+            tool("square.grid.2x2", "Sites", tint: showSites ? .accentColor : .primary) { showSites.toggle() }
             Spacer()
             tool("books.vertical", "Library") { showLibrary = true }
             Spacer()
@@ -186,7 +187,7 @@ struct BrowserView: View {
                 BrandMark().padding(.top, Theme.pad)
                 Text("Null View").font(.title2.weight(.semibold))
             }
-            SitesGrid(model: model)
+            SitesGrid(model: model, onOpen: { showSites = false })
             Button("To open links from other apps, set up the Shortcut in Settings") { showSettings = true }
                 .font(.footnote).multilineTextAlignment(.center)
                 .padding(.horizontal, 32).padding(.bottom, Theme.gap)

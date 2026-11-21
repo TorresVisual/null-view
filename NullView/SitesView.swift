@@ -2,7 +2,7 @@ import NullViewCore
 import SwiftUI
 
 /// Saved-sites launcher (issue #12): tiles for platforms the user added by hand, most opened first.
-/// Used inline on the start page and inside `SitesSheet`.
+/// Shown on the start page, which the toolbar's Sites button also brings up over the current page.
 struct SitesGrid: View {
     let model: BrowserModel
     var onOpen: () -> Void = {}
@@ -83,19 +83,4 @@ struct SitesGrid: View {
     }
 
     private func reload() { list = model.sites.ordered() }
-}
-
-/// The same grid as a sheet, for the toolbar.
-struct SitesSheet: View {
-    let model: BrowserModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            SitesGrid(model: model, onOpen: { dismiss() })
-                .navigationTitle("Sites")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-        }
-    }
 }
