@@ -1,51 +1,98 @@
 import NullViewCore
 import SwiftUI
 
-/// Settings section: list status, "Update now", custom rules, allowed sites.
+/// Settings section: one row for the lists (summary), "Update now", allowed sites.
 struct BlockingSection: View {
     @ObservedObject var blocker: Blocker
 
+    private var summary: String {
+        let all = blocker.config.all
+        let on = all.filter { blocker.config.isEnabled($0.id) }
+        var s = "\(on.count) of \(all.count) on"
+        if let latest = on.compactMap({ blocker.meta[$0.id]?.updated }).max() {
+            s += ", updated " + latest.formatted(.relative(presentation: .named))
+        }
+        return s
+    }
+
     var body: some View {
         Section {
-            ForEach(blocker.config.all, id: \.id) { l in
-                Toggle(isOn: Binding(get: { blocker.config.isEnabled(l.id) },
-                                     set: { on in Task { await blocker.setEnabled(l.id, on) } })) {
-                    row(l.id, l.name)
+            NavigationLink { FilterListsView(blocker: blocker) } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Filter lists")
+                    Text(summary).font(.footnote).foregroundStyle(.secondary)
                 }
-                .disabled(blocker.isUpdating)
-                .deleteDisabled(!blocker.config.isCustom(l.id))
             }
-            .onDelete { offsets in
-                let all = blocker.config.all
-                offsets.map { all[$0].id }.forEach { id in Task { await blocker.removeList(id) } }
-            }
-            NavigationLink("Add a list") { AddListView(blocker: blocker) }
-            row(Blocker.customID, "Custom rules")
+            NavigationLink("Allowed sites (\(blocker.allowlist.hosts.count))") { AllowlistView(blocker: blocker) }
             if let e = blocker.errors["engine"] { Text(e).font(.footnote).foregroundStyle(.red) }
             Button { Task { await blocker.update() } } label: {
                 HStack { Text("Update now"); if blocker.isUpdating { Spacer(); ProgressView() } }
             }
             .disabled(blocker.isUpdating)
-            NavigationLink("Custom rules") { CustomRulesView(blocker: blocker) }
-            NavigationLink("Allowed sites (\(blocker.allowlist.hosts.count))") { AllowlistView(blocker: blocker) }
         } header: { Text("Blocking") } footer: {
-            Text("Lists update when older than 24 hours, at launch and when you come back to the app. Cookie Notices and Popups are off until you turn them on. Swipe a list you added to remove it. If an update fails, the last working lists keep blocking. Only the list downloads leave this device.")
+            Text("Lists update on their own when older than 24 hours. If an update fails, the last working lists keep blocking.")
         }
+    }
+}
+
+/// The list toggles, add and remove.
+struct FilterListsView: View {
+    @ObservedObject var blocker: Blocker
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(blocker.config.all, id: \.id) { l in
+                    Toggle(isOn: Binding(get: { blocker.config.isEnabled(l.id) },
+                                         set: { on in Task { await blocker.setEnabled(l.id, on) } })) {
+                        row(l.id, l.name)
+                    }
+                    .disabled(blocker.isUpdating)
+                    .deleteDisabled(!blocker.config.isCustom(l.id))
+                }
+                .onDelete { offsets in
+                    let all = blocker.config.all
+                    offsets.map { all[$0].id }.forEach { id in Task { await blocker.removeList(id) } }
+                }
+                NavigationLink("Add a list") { AddListView(blocker: blocker) }
+            } footer: {
+                Text("Cookie Notices and Popups are off until you turn them on. Swipe a list you added to remove it. Only the list downloads leave this device.")
+            }
+        }
+        .navigationTitle("Filter lists")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func row(_ id: String, _ name: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(name)
             if let m = blocker.meta[id] {
-                Text("\(m.safariRules.formatted()) rules, updated \(m.updated.formatted(date: .abbreviated, time: .shortened))")
+                Text("\(m.safariRules.formatted()) rules, updated \(m.updated.formatted(.relative(presentation: .named)))")
                     .font(.footnote).foregroundStyle(.secondary)
-            } else if id != Blocker.customID {
+            } else {
                 Text("Not downloaded yet").font(.footnote).foregroundStyle(.secondary)
             }
             if let e = blocker.errors[id] {
                 Text("Update failed: \(e)").font(.footnote).foregroundStyle(.red)
             }
         }
+    }
+}
+
+/// Developer tool, so it lives under Advanced.
+struct DetectionLogView: View {
+    @ObservedObject var detector: VideoDetector
+
+    var body: some View {
+        Form {
+            Section {
+                Text(detector.logText.isEmpty ? "Nothing detected yet." : detector.logText)
+                    .font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
+                Button("Copy log") { UIPasteboard.general.string = detector.log.joined(separator: "\n") }
+            }
+        }
+        .navigationTitle("Video detection log")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -64,7 +111,7 @@ struct CustomRulesView: View {
                     .autocorrectionDisabled()
                     .frame(minHeight: 220)
             } footer: {
-                Text("One rule per line, AdBlock Plus or AdGuard syntax. Example: ||ads.example.com^ or example.com##.banner. To hide something without typing a rule, long-press the shield in the toolbar and choose Hide an element.")
+                Text("One rule per line, AdBlock Plus or AdGuard syntax. Example: ||ads.example.com^ or example.com##.banner. To hide something without typing a rule, open More in the toolbar and choose Hide an element.")
             }
             Section {
                 Button { save() } label: {

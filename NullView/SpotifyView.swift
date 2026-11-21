@@ -175,9 +175,9 @@ struct SpotifyOverlay: View {
             HStack {
                 Text("Spotify").font(.headline)
                 Spacer()
-                Button("Done") { show = false }.frame(minWidth: 44, minHeight: 44)
+                Button("Done") { show = false }.frame(minWidth: Theme.hit, minHeight: Theme.hit)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Theme.pad)
             .background(.bar)
             WebViewHost(webView: player.webView)
             controls
@@ -200,7 +200,7 @@ struct SpotifyOverlay: View {
                 Spacer()
                 button("backward.fill", "Previous track") { player.send("previoustrack") }
                 Spacer()
-                button(player.playing ? "pause.fill" : "play.fill", player.playing ? "Pause" : "Play") { player.send("playpause") }
+                button(player.playing ? "pause.fill" : "play.fill", player.playing ? "Pause" : "Play", tint: .accentColor) { player.send("playpause") }
                     .font(.title)
                 Spacer()
                 button("forward.fill", "Next track") { player.send("nexttrack") }
@@ -213,8 +213,9 @@ struct SpotifyOverlay: View {
         .background(.bar)
     }
 
-    private func button(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).frame(minWidth: 44, minHeight: 44) }
+    private func button(_ symbol: String, _ label: String, tint: Color = Theme.paper, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).frame(minWidth: Theme.hit, minHeight: Theme.hit) }
+            .tint(tint)
             .accessibilityLabel(label)
     }
 }

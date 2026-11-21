@@ -13,11 +13,11 @@ struct SitesGrid: View {
     @State private var newName = ""
     @State private var rejected = false
 
-    private let columns = [GridItem(.adaptive(minimum: 84), spacing: 16)]
+    private let columns = [GridItem(.adaptive(minimum: 84), spacing: Theme.pad)]
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
+            LazyVGrid(columns: columns, spacing: Theme.pad) {
                 ForEach(list, id: \.url) { site in
                     Button { open(site) } label: { tile(site) }
                         .buttonStyle(.plain)
@@ -28,14 +28,14 @@ struct SitesGrid: View {
                 Button { newAddress = ""; newName = ""; adding = true } label: {
                     VStack(spacing: 6) {
                         Image(systemName: "plus").font(.title2).frame(width: 56, height: 56)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: Theme.radius))
                         Text("Add site").font(.caption).foregroundStyle(.secondary)
                     }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: Theme.hit)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(16)
+            .padding(Theme.pad)
         }
         .onAppear(perform: reload)
         .alert("Add site", isPresented: $adding) {
@@ -66,12 +66,12 @@ struct SitesGrid: View {
                 }
             }
             .frame(width: 56, height: 56)
-            .background(.tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: Theme.radius))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
             .accessibilityHidden(true)
             Text(site.name).font(.caption).lineLimit(1).foregroundStyle(.primary)
         }
-        .frame(minHeight: 44)
+        .frame(minHeight: Theme.hit)
         .accessibilityElement(children: .combine)
     }
 

@@ -70,9 +70,8 @@ Brand mark (gradient slash-and-ring, 72 pt) and "Null View" in `.title2` above t
 ## Library
 
 - Row titles `.primary` (they render tint-blue today, as buttons do): use `.buttonStyle(.plain)` on the row.
-- "This page" actions become one row of two buttons above the list, not two list rows.
+- "This page" actions become one row of two bordered buttons ("Watch later", "Add to queue"), not two list rows.
 - Posterless rows (all queue items) show the site's initial on a `radiusSmall` tile, same as Sites tiles, not a grey box.
-- Content gets a bottom inset equal to the search field height so the last row is not covered.
 - Tabs and sort/filter unchanged.
 
 ## Settings: five groups

@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: BrowserModel
     @ObservedObject var blocker: Blocker
-    let detector: VideoDetector
+    @ObservedObject var detector: VideoDetector
     @Environment(\.dismiss) private var dismiss
     @AppStorage(BrowserModel.searchTemplateKey) private var template = AddressInput.defaultSearchTemplate
     @State private var confirmClear = false
@@ -31,18 +31,17 @@ struct SettingsView: View {
                     Text("nullview://open?url=")
                         .font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
                 } header: { Text("Sharing") } footer: {
-                    Text("In the Shortcuts app, make a shortcut that accepts URLs from the share sheet and runs Open URLs on nullview://open?url= followed by the shared link. Copying a link also works: Null View offers to open it.")
+                    Text("In the Shortcuts app, make a shortcut that accepts URLs from the share sheet and runs Open URLs on this address followed by the shared link. Copying a link also works: Null View offers to open it.")
                 }
-                Section {
-                    Text(detector.logText.isEmpty ? "Nothing detected yet." : detector.logText)
-                        .font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
-                    Button("Copy log") { UIPasteboard.general.string = detector.log.joined(separator: "\n") }
-                } header: { Text("Video detection log") }
                 Section {
                     Button("Clear website data", role: .destructive) { confirmClear = true }
                     if cleared { Text("Cookies, logins and site storage cleared.").font(.footnote) }
                 } header: { Text("Privacy") } footer: {
                     Text("Nothing leaves this device except the pages you open.")
+                }
+                Section("Advanced") {
+                    NavigationLink("Custom rules") { CustomRulesView(blocker: blocker) }
+                    NavigationLink("Video detection log") { DetectionLogView(detector: detector) }
                 }
             }
             .navigationTitle("Settings")

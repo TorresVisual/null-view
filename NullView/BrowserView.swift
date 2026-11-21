@@ -23,6 +23,7 @@ struct BrowserView: View {
     /// Pasteboard change count we already offered or dismissed.
     @State private var handledPasteboard = UIPasteboard.general.changeCount
     @State private var clipboardOffer = false
+    @Environment(\.verticalSizeClass) private var vSize
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,12 +33,9 @@ struct BrowserView: View {
                 if videoMode.active { VideoModeView(mode: videoMode) }
                 else if let f = model.failure { errorView(f.message) }
                 else if model.url == nil && !model.isLoading { startView }
-                else if detector.button != .hidden { videoButton }
+                else if detector.button == .enabled { videoButton }
             }
-            if let u = watch.resumeOffer, !videoMode.active { resumeBar(u).transition(bar) }
-            if clipboardOffer && !videoMode.active { clipboardBar.transition(bar) }
-            if model.blockedPopup != nil && !videoMode.active { popupBar.transition(bar) }
-            if let t = model.toast, !videoMode.active { toastBar(t).transition(bar) }
+            banner
             if !videoMode.active { toolbar }
         }
         .animation(.easeInOut(duration: 0.2), value: clipboardOffer)
@@ -65,9 +63,29 @@ struct BrowserView: View {
     private let bar = AnyTransition.opacity.combined(with: .move(edge: .bottom))
 
     /// Icon-only toolbar button: 44 pt hit area (Apple's minimum) and a VoiceOver name.
-    private func tool(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).frame(minWidth: 44, minHeight: 44) }
+    /// Primary colour; only the shield takes the accent, so it reads as the one stateful control.
+    private func tool(_ symbol: String, _ label: String, tint: Color = .primary, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).frame(minWidth: Theme.hit, minHeight: Theme.hit) }
+            .tint(tint)
             .accessibilityLabel(label)
+    }
+
+    /// At most one banner at a time. Priority: popup, toast, clipboard, resume (docs/design-baseline.md).
+    @ViewBuilder private var banner: some View {
+        if videoMode.active {
+            EmptyView()
+        } else if model.blockedPopup != nil {
+            Banner(icon: "xmark.rectangle", text: "Blocked a popup", buttonTitle: "Open",
+                   buttonAction: { model.openBlockedPopup() }, dismiss: { model.blockedPopup = nil }).transition(bar)
+        } else if let t = model.toast {
+            Banner(icon: "checkmark.circle", text: t).transition(bar)
+        } else if clipboardOffer {
+            Banner(icon: "doc.on.clipboard", text: "Link on clipboard", buttonTitle: "Open",
+                   buttonAction: { openClipboard() }, dismiss: { dismissClipboard() }).transition(bar)
+        } else if watch.resumeOffer != nil {
+            Banner(icon: "play.circle", text: "Resume where you left off", buttonTitle: "Resume",
+                   buttonAction: { watch.enterVideoWhenReady() }, dismiss: { watch.resumeOffer = nil }).transition(bar)
+        }
     }
 
     // MARK: Pieces
@@ -83,14 +101,14 @@ struct BrowserView: View {
                     .submitLabel(.go)
                     .onSubmit { model.go(text); editing = false }
                 if editing && !text.isEmpty {
-                    Button { text = "" } label: { Image(systemName: "xmark.circle.fill").frame(minWidth: 44, minHeight: 44) }
+                    Button { text = "" } label: { Image(systemName: "xmark.circle.fill").frame(minWidth: Theme.hit, minHeight: Theme.hit) }
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("Clear address")
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 2)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            .padding(.horizontal, Theme.gap).padding(.vertical, 8)
             ProgressView(value: model.progress)
                 .opacity(model.isLoading ? 1 : 0)
                 .scaleEffect(y: 0.5)
@@ -98,10 +116,9 @@ struct BrowserView: View {
     }
 
     private var toolbar: some View {
-        HStack {
+        let blocking = blocker.isBlocking(on: model.url)
+        return HStack {
             tool("chevron.backward", "Back") { model.goBack() }.disabled(!model.canGoBack)
-            Spacer()
-            tool("chevron.forward", "Forward") { model.goForward() }.disabled(!model.canGoForward)
             Spacer()
             if model.isLoading {
                 tool("xmark", "Stop loading") { model.stop() }
@@ -110,52 +127,69 @@ struct BrowserView: View {
                     .disabled(model.url == nil && model.failure == nil)
             }
             Spacer()
-            tool(blocker.isBlocking(on: model.url) ? "shield.lefthalf.filled" : "shield.slash",
-                 blocker.isBlocking(on: model.url) ? "Blocking on, turn off for this site" : "Blocking off, turn on for this site") {
+            tool(blocking ? "shield.lefthalf.filled" : "shield.slash",
+                 blocking ? "Blocking on, turn off for this site" : "Blocking off, turn on for this site",
+                 tint: blocking ? .accentColor : .secondary) {
                 model.toggleBlocking()
             }
             .disabled(model.url == nil)
-            .contextMenu {
-                Button { model.pickElement() } label: { Label("Hide an element…", systemImage: "eye.slash") }
-                    .disabled(model.url == nil || !blocker.isBlocking(on: model.url))
-            }
             Spacer()
             tool("square.grid.2x2", "Sites") { showSites = true }
             Spacer()
             tool("books.vertical", "Library") { showLibrary = true }
             Spacer()
-            tool(blocker.hasError ? "exclamationmark.triangle" : "gearshape",
-                 blocker.hasError ? "Settings, filter update failed" : "Settings") { showSettings = true }
+            moreMenu
         }
         .font(.title3)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Theme.pad)
         .background(.bar)
     }
 
-    /// Floating button: opens video mode on the primary video.
-    /// Disabled when nothing is controllable (no source): the page stays a plain browser.
+    /// Forward, Hide an element, Settings. Carries the warning when a filter update failed.
+    private var moreMenu: some View {
+        Menu {
+            Button { model.goForward() } label: { Label("Forward", systemImage: "chevron.forward") }
+                .disabled(!model.canGoForward)
+            Button { model.pickElement() } label: { Label("Hide an element…", systemImage: "eye.slash") }
+                .disabled(model.url == nil || !blocker.isBlocking(on: model.url))
+            Button { showSettings = true } label: {
+                Label("Settings", systemImage: blocker.hasError ? "exclamationmark.triangle" : "gearshape")
+            }
+        } label: {
+            Image(systemName: blocker.hasError ? "exclamationmark.triangle" : "ellipsis.circle")
+                .frame(minWidth: Theme.hit, minHeight: Theme.hit)
+        }
+        .tint(blocker.hasError ? Color.orange : Color.primary)
+        .accessibilityLabel(blocker.hasError ? "More, filter update failed" : "More")
+    }
+
+    /// Floating button: opens video mode on the primary video. Shown only when a controllable video exists,
+    /// so the page stays a plain browser otherwise. Bottom left: sites keep their tab bars on the right.
     private var videoButton: some View {
         VStack {
             Spacer()
             HStack {
-                Spacer()
                 Button { videoMode.enter() } label: {
-                    Image(systemName: "play.rectangle.fill").font(.title2).padding(14)
+                    Image(systemName: "play.rectangle.fill").font(.title2).frame(width: Theme.hit + 8, height: Theme.hit + 8)
                         .background(.regularMaterial, in: Circle())
                 }
-                .disabled(detector.button != .enabled)
                 .accessibilityLabel("Open video mode")
-                .padding(16)
+                Spacer()
             }
+            .padding(Theme.pad)
         }
     }
 
     private var startView: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Theme.gap) {
+            if vSize != .compact {
+                BrandMark().padding(.top, Theme.pad)
+                Text("Null View").font(.title2.weight(.semibold))
+            }
             SitesGrid(model: model)
-            Text("Add the sites you use most, then open them in one tap. To open links from other apps, set up the Shortcut described in Settings under Sharing.")
-                .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.secondary)
-                .padding(.horizontal, 32).padding(.vertical, 12)
+            Button("To open links from other apps, set up the Shortcut in Settings") { showSettings = true }
+                .font(.footnote).multilineTextAlignment(.center)
+                .padding(.horizontal, 32).padding(.bottom, Theme.gap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
@@ -174,57 +208,7 @@ struct BrowserView: View {
         .background(Color(.systemBackground))
     }
 
-    private func resumeBar(_ u: URL) -> some View {
-        HStack {
-            Image(systemName: "play.circle")
-            Text("Resume where you left off").font(.subheadline)
-            Spacer()
-            Button("Resume") { watch.enterVideoWhenReady() }.buttonStyle(.borderedProminent)
-            Button { watch.resumeOffer = nil } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
-                .accessibilityLabel("Dismiss")
-        }
-        .padding(.horizontal, 12).padding(.vertical, 6)
-        .background(.bar)
-    }
-
-    private func toastBar(_ text: String) -> some View {
-        HStack {
-            Image(systemName: "checkmark.circle")
-            Text(text).font(.subheadline)
-            Spacer()
-        }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(.bar)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var popupBar: some View {
-        HStack {
-            Image(systemName: "xmark.rectangle")
-            Text("Blocked a popup").font(.subheadline)
-            Spacer()
-            Button("Open") { model.openBlockedPopup() }.buttonStyle(.borderedProminent)
-            Button { model.blockedPopup = nil } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
-                .accessibilityLabel("Dismiss")
-        }
-        .padding(.horizontal, 12).padding(.vertical, 6)
-        .background(.bar)
-    }
-
     // MARK: Clipboard (backup path for the nullview:// Shortcut)
-
-    private var clipboardBar: some View {
-        HStack {
-            Image(systemName: "doc.on.clipboard")
-            Text("Link on clipboard").font(.subheadline)
-            Spacer()
-            Button("Open") { openClipboard() }.buttonStyle(.borderedProminent)
-            Button { dismissClipboard() } label: { Image(systemName: "xmark").frame(minWidth: 44, minHeight: 44) }
-                .accessibilityLabel("Dismiss")
-        }
-        .padding(.horizontal, 12).padding(.vertical, 6)
-        .background(.bar)
-    }
 
     /// `hasURLs` does not trigger the iOS paste prompt; reading `.url` does, so only on tap.
     private func checkClipboard() {

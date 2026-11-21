@@ -280,8 +280,8 @@ struct VideoModeView: View {
             Spacer()
             scrubber
         }
-        .padding(.horizontal, 24).padding(.vertical, 12)
-        .foregroundStyle(.white)
+        .padding(.horizontal, 24).padding(.vertical, Theme.gap)
+        .foregroundStyle(Theme.paper)
     }
 
     /// Speed (not for live streams) and sleep timer. A native Menu, so no custom panel to maintain.
@@ -296,7 +296,7 @@ struct VideoModeView: View {
                 ForEach(SleepTimer.choices, id: \.self) { Text(SleepTimer.label($0)).tag($0) }
             }
         } label: {
-            Image(systemName: mode.sleep.choice == .off ? "gearshape" : "moon.zzz.fill").font(.title3).frame(width: 44, height: 44)
+            Image(systemName: mode.sleep.choice == .off ? "slider.horizontal.3" : "moon.zzz.fill").font(.title3).frame(width: Theme.hit, height: Theme.hit)
                 .background(.ultraThinMaterial, in: Circle())
         }
         .accessibilityLabel("Playback options")
@@ -310,6 +310,7 @@ struct VideoModeView: View {
                     scrubbing = editing
                     if editing { mode.poke() } else { mode.seek(to: scrub) }
                 }
+                .tint(.accentColor)
                 Text(VideoGestures.clock(mode.duration)).monospacedDigit()
             }
             .font(.footnote)
@@ -340,7 +341,7 @@ struct VideoModeView: View {
 
     private func circleButton(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.title3).frame(width: 44, height: 44)
+            Image(systemName: symbol).font(.title3).frame(width: Theme.hit, height: Theme.hit)
                 .background(.ultraThinMaterial, in: Circle())
         }
         .accessibilityLabel(label)

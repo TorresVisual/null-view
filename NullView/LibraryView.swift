@@ -45,11 +45,17 @@ struct LibraryView: View {
                 }
                 if let u = model.url, AddressInput.webURL(u.absoluteString) != nil {
                     Section("This page") {
-                        Button(library.isLater(u) ? "Remove from Watch Later" : "Add to Watch Later") {
-                            library.toggleLater(u, title: model.webView.title ?? "")
-                            reload()
+                        HStack(spacing: Theme.gap) {
+                            Button(library.isLater(u) ? "Remove from Later" : "Watch later") {
+                                library.toggleLater(u, title: model.webView.title ?? "")
+                                reload()
+                            }
+                            Button("Add to queue") { library.enqueue(u); reload() }
                         }
-                        Button("Add to queue") { library.enqueue(u); reload() }
+                        .buttonStyle(.bordered)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
                     }
                 }
                 Section {
@@ -57,7 +63,7 @@ struct LibraryView: View {
                         Text(all.isEmpty ? "Nothing here yet." : "No matches.").foregroundStyle(.secondary)
                     }
                     ForEach(items) { item in
-                        Button { open(item) } label: { row(item) }
+                        Button { open(item) } label: { row(item) }.buttonStyle(.plain)
                     }
                     .onDelete(perform: delete)
                     // Reordering is only safe when the list on screen is the whole queue.
@@ -100,19 +106,21 @@ struct LibraryView: View {
             }
         } label: {
             Image(systemName: sort == .newest && site == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
-                .frame(minWidth: 44, minHeight: 44)
+                .frame(minWidth: Theme.hit, minHeight: Theme.hit)
                 .accessibilityLabel("Sort and filter")
         }
     }
 
     private func row(_ item: Item) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.gap) {
             AsyncImage(url: item.poster.flatMap(URL.init(string:))) { img in
                 img.resizable().scaledToFill()
             } placeholder: {
-                Color.secondary.opacity(0.2).overlay(Image(systemName: "play.rectangle").foregroundStyle(.secondary).accessibilityHidden(true))
+                Rectangle().fill(.quaternary).overlay(
+                    Text(LibraryQuery.host(item.page).first.map { String($0).uppercased() } ?? "?")
+                        .font(.title3.weight(.semibold)).foregroundStyle(.secondary).accessibilityHidden(true))
             }
-            .frame(width: 80, height: 45).clipShape(RoundedRectangle(cornerRadius: 6))
+            .frame(width: 80, height: 45).clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).lineLimit(2).foregroundStyle(.primary)
                 Text(item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
