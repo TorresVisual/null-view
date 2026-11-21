@@ -122,6 +122,8 @@ final class SpotifyCatalog: ObservableObject {
         grid = .loading(first ? "Opening Spotify…" : "Loading more albums…")
         _ = await drain()
         let reloaded = first || !onDiscography || reloadNext
+        // Build marker and state, so a stalled run can be told apart from the log (issue #19, loading stalls).
+        player.note("spotify albums fetch v2: have \(artist.albums.count)/\(artist.total ?? 0), first=\(first) reload=\(reloaded) hide=\(hideListened) reverse=\(reversed) \(shelf.rawValue) on=\(onDiscography)")
         reloadNext = false
         if reloaded { await player.load(Self.discographyURL) }
         let start = artist.albums.count
@@ -139,7 +141,7 @@ final class SpotifyCatalog: ObservableObject {
             // `quiet`: steps since the page last sent anything. A freshly loaded page delivers its first batch (about 140)
             // in bursts with pauses; moving it before it is quiet left it stuck at 60 of 313 (found on the phone, #19).
             quiet = got == 0 ? quiet + 1 : 0
-            if quiet >= 6 { settled = true }   // latched: later bursts are the answer to our own scrolls
+            if quiet >= 6, !settled { settled = true; player.note("spotify albums page quiet at \(artist.albums.count)/\(artist.total ?? 0), step \(step)") }   // latched: later bursts are the answer to our own scrolls
             if settled { stale = artist.albums.count == before ? stale + 1 : 0 }
             if step >= 12, artist.total == nil { return fail(&grid, SpotifyFormatError(missing: "discography totalCount")) }
             if first {
