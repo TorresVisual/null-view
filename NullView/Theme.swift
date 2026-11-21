@@ -11,6 +11,9 @@ enum Theme {
     /// Text and icons on `ink`.
     static let paper = Color(red: 0xF4 / 255, green: 0xF6 / 255, blue: 0xF2 / 255)
 
+    /// Detail text and numbers on `ink` (the dark-only Spotify screens, where `.secondary` is not used).
+    static let paperDim = paper.opacity(0.55)
+
     /// Backdrop of the brand mark, video mode and Spotify (the icon's background).
     static let ink = Color(red: 0x14 / 255, green: 0x17 / 255, blue: 0x1B / 255)
 }

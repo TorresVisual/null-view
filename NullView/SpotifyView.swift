@@ -208,27 +208,23 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
 /// page's timers, so closing a sheet stopped playback at the end of the current track.
 struct SpotifyOverlay: View {
     @ObservedObject var player: SpotifyPlayer
-    @ObservedObject var catalog: SpotifyCatalog   // observed here too: the header and banner read it
+    @ObservedObject var catalog: SpotifyCatalog   // observed here too: the top bar and player capsule read it
     @Binding var show: Bool
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            if let why = catalog.formatProblem {
-                Banner(icon: "exclamationmark.triangle", text: "Spotify changed its format (\(why)). This is Spotify's own page instead.",
-                       buttonTitle: "Retry", buttonAction: { player.showPage = false; catalog.retry() })
-            }
-            // The page stays in the tree behind the native screens: it plays the audio and is what the screens read.
-            ZStack {
-                WebViewHost(webView: player.webView)
-                    .opacity(player.showPage ? 1 : 0)
-                    .allowsHitTesting(player.showPage)
-                if !player.showPage { SpotifyScreens(catalog: catalog) }
-            }
-            controls
+        // The page stays in the tree behind the native screens: it plays the audio and is what the screens read.
+        // The glass controls are safe-area insets (issue #22), so the screens scroll under them instead of ending at a bar.
+        ZStack {
+            WebViewHost(webView: player.webView)
+                .opacity(player.showPage ? 1 : 0)
+                .allowsHitTesting(player.showPage)
+            if !player.showPage { SpotifyScreens(catalog: catalog, playingTitle: player.title) }
         }
-        .background(Color.black.ignoresSafeArea())
+        .safeAreaInset(edge: .top, spacing: 0) { topBar }
+        .safeAreaInset(edge: .bottom, spacing: 0) { playerCapsule }
+        .background(Theme.ink.ignoresSafeArea())
+        .environment(\.colorScheme, .dark)   // Spotify stays dark whatever the system says (design-baseline.md)
         .opacity(show ? 1 : 0)
         .allowsHitTesting(show)
         .accessibilityHidden(!show)
@@ -240,57 +236,68 @@ struct SpotifyOverlay: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            if catalog.album != nil, !player.showPage {
-                button("chevron.backward", "Back to albums") { catalog.close() }
+    /// Floating glass buttons, no bar: back (an album, or the web page's history), then the page toggle and Done.
+    private var topBar: some View {
+        VStack(spacing: Theme.gap) {
+            HStack(spacing: Theme.gap) {
+                if player.showPage {
+                    glassIcon("chevron.backward", "Page back") { player.webView.goBack(); player.refresh() }.disabled(!player.canGoBack)
+                    glassIcon("chevron.forward", "Page forward") { player.webView.goForward(); player.refresh() }.disabled(!player.canGoForward)
+                } else if catalog.album != nil {
+                    glassIcon("chevron.backward", "Back to albums") { catalog.close() }
+                }
+                Spacer(minLength: 0)
+                glassIcon(player.showPage ? "square.grid.2x2" : "globe", player.showPage ? "Show albums" : "Show Spotify page") { player.showPage.toggle() }
+                Button { show = false } label: {
+                    Text("Done").foregroundStyle(Color.accentColor).padding(.horizontal, Theme.gap).frame(minHeight: Theme.hit)
+                }
+                .buttonStyle(.glass).buttonBorderShape(.capsule)
             }
-            Text(catalog.album != nil && !player.showPage ? "Chapters" : "Spotify").font(.headline)
-            Spacer()
-            Button { player.showPage.toggle() } label: {
-                Image(systemName: player.showPage ? "square.grid.2x2" : "globe").frame(minWidth: Theme.hit, minHeight: Theme.hit)
+            if let why = catalog.formatProblem {
+                Banner(icon: "exclamationmark.triangle", text: "Spotify changed its format (\(why)). This is Spotify's own page instead.",
+                       buttonTitle: "Retry", buttonAction: { player.showPage = false; catalog.retry() })
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
             }
-            .accessibilityLabel(player.showPage ? "Show albums" : "Show Spotify page")
-            Button("Done") { show = false }.frame(minWidth: Theme.hit, minHeight: Theme.hit)
         }
         .padding(.horizontal, Theme.pad)
-        .background(.bar)
+        .padding(.vertical, Theme.gap / 2)
     }
 
-    /// The page's own controls are tiny at the fitted zoom, so these drive the player from outside.
-    private var controls: some View {
-        VStack(spacing: 0) {
-            Text(player.title).font(.caption).lineLimit(1).foregroundStyle(.secondary)
-                .padding(.horizontal, 16).padding(.top, 6)
-            HStack {
-                if player.showPage {
-                    button("chevron.backward", "Page back") { player.webView.goBack(); player.refresh() }.disabled(!player.canGoBack)
-                } else {
-                    Color.clear.frame(width: Theme.hit, height: Theme.hit)
-                }
-                Spacer()
-                button("backward.fill", "Previous track") { player.send("previoustrack") }
-                Spacer()
-                button(player.playing ? "pause.fill" : "play.fill", player.playing ? "Pause" : "Play", tint: .accentColor) { player.send("playpause") }
-                    .font(.title)
-                Spacer()
-                button("forward.fill", "Next track") { player.send("nexttrack") }
-                Spacer()
-                if player.showPage {
-                    button("chevron.forward", "Page forward") { player.webView.goForward(); player.refresh() }.disabled(!player.canGoForward)
-                } else {
-                    Color.clear.frame(width: Theme.hit, height: Theme.hit)
-                }
+    /// The page's own controls are tiny at the fitted zoom, so these drive the player from outside. A floating glass
+    /// capsule: what is playing (chapter, then album) and previous, play, next.
+    private var playerCapsule: some View {
+        let now = SpotifyNowPlaying(player.title)
+        return HStack(spacing: Theme.gap) {
+            Cover(url: catalog.cover(forAlbum: now.album)).frame(width: Theme.hit)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(now.chapter.isEmpty ? "Nothing playing" : now.chapter).font(.subheadline.weight(.semibold)).lineLimit(1)
+                if let album = now.album { Text(album).font(.caption).foregroundStyle(Theme.paperDim).lineLimit(1) }
             }
-            .font(.title3)
-            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            plainIcon("backward.fill", "Previous track") { player.send("previoustrack") }
+            Button { player.send("playpause") } label: {
+                Image(systemName: player.playing ? "pause.fill" : "play.fill").foregroundStyle(Theme.ink)
+                    .frame(width: Theme.hit, height: Theme.hit).background(Color.accentColor, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(player.playing ? "Pause" : "Play")
+            plainIcon("forward.fill", "Next track") { player.send("nexttrack") }
         }
-        .background(.bar)
+        .padding(.horizontal, Theme.gap).padding(.vertical, Theme.gap / 2)
+        .glassEffect(.regular, in: .capsule)
+        .padding(.horizontal, Theme.gap).padding(.bottom, Theme.gap / 2)
     }
 
-    private func button(_ symbol: String, _ label: String, tint: Color = Theme.paper, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).frame(minWidth: Theme.hit, minHeight: Theme.hit) }
-            .tint(tint)
+    private func glassIcon(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).foregroundStyle(Theme.paper).frame(width: Theme.hit, height: Theme.hit) }
+            .buttonStyle(.glass).buttonBorderShape(.circle)
+            .accessibilityLabel(label)
+    }
+
+    private func plainIcon(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).foregroundStyle(Theme.paper).frame(width: Theme.hit, height: Theme.hit) }
+            .buttonStyle(.plain)
             .accessibilityLabel(label)
     }
 }

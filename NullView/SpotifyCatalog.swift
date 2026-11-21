@@ -84,6 +84,13 @@ final class SpotifyCatalog: ObservableObject {
         return reversed ? list.reversed() : list
     }
 
+    /// The cover of the album the player says it is playing, for the player capsule (issue #22): matched by name among
+    /// the albums read so far. nil when unknown (the player only reports a title string), and the capsule shows a plain tile.
+    func cover(forAlbum name: String?) -> URL? {
+        guard let name else { return nil }
+        return albums.first { $0.shortTitle == name }?.coverURL
+    }
+
     /// Fires on a change of the player's title only, so unticking while the last chapter still plays sticks.
     /// Only albums whose full chapter list was read can be judged (a partial list has the wrong "last").
     private func trackChanged(_ title: String) {

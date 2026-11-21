@@ -90,7 +90,12 @@ Keep the layout. Apply: `Theme.hit`, `paper` foreground, accent on the scrubber 
 
 ## Spotify
 
-Same banner-style header (title, Done in accent). Transport bar uses `paper` icons with accent only on the play state, instead of stock blue.
+Issue #22 replaced the banner header and transport bar with iOS 26 system glass (`glassEffect`, `.buttonStyle(.glass)`). Always dark (`ink` backdrop, `paper` text), whatever the system scheme.
+
+- **No header bar.** Floating glass buttons at the top: back (an album, or the web page's history), the page toggle (globe), and Done (accent text, capsule). They and the player capsule are safe-area insets in `SpotifyOverlay`, so the screens scroll under them.
+- **Grid.** Folgen/Specials segmented picker, then two chips (Hide listened, Newest first or Oldest first: Folgen run oldest first and Specials newest first, so the chip flips with the list). Two or more columns, titles reserve two lines so a row's covers align. Title without "Folge N:", then `number · year`. A listened album keeps a full cover with a small accent check badge and a dimmed title.
+- **Chapter screen.** Big centred cover, name, `year · N chapters`, an accent Play pill (resumes) and a round glass "mark as listened" button. Rows are number, title, duration with one inset for every separator. A row drops the album's name when the title starts with it (`SpotifyChapter.displayTitle`); the playing row is tinted accent.
+- **Player capsule.** Floating glass capsule: thumbnail, chapter, album, previous, accent-filled play, next. The player reports one string, so chapter and album come from splitting on dashes (`SpotifyNowPlaying`, a guess about how these audiobooks are titled); the thumbnail is found by album name among the albums read so far, else a plain tile.
 
 ## Check
 
