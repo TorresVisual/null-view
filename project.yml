@@ -26,6 +26,8 @@ targets:
         buildPhase: resources
       - path: js/src/fullscreen-hook.js # injected as-is into the page world (fullscreen requests -> DOM event)
         buildPhase: resources
+      - path: js/src/spotify-spy.js # SPIKE #17: page-world recorder of Spotify's JSON responses (Spotify view only)
+        buildPhase: resources
     dependencies:
       - package: NullViewCore
       - package: GRDB

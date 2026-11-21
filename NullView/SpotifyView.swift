@@ -99,6 +99,13 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         // Not .desktop: the log showed it never took effect (platform stayed iPhone); the Mac UA alone is what Spotify reads.
         cfg.userContentController.addUserScript(WKUserScript(source: Self.fitViewport, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         cfg.userContentController.addUserScript(WKUserScript(source: Self.playerHook, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        // SPIKE (#17): records Spotify's own JSON responses; read back by runSpike(). Page world, no message handler.
+        if let u = Bundle.main.url(forResource: "spotify-spy", withExtension: "js"),
+           let src = try? String(contentsOf: u, encoding: .utf8) {
+            cfg.userContentController.addUserScript(WKUserScript(source: src, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+        } else {
+            note("spotify-spy.js missing from the app bundle")
+        }
         // Track changes are driven by page timers; a page that thinks it is hidden gets them throttled,
         // which stalls the hop to the next track (locked screen, closed overlay).
         cfg.userContentController.addUserScript(WKUserScript(source: Self.alwaysVisible, injectionTime: .atDocumentStart, forMainFrameOnly: false))
@@ -156,6 +163,104 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         }
     }
 
+    // MARK: SPIKE (#17), temporary: what JSON does the page load for an artist's albums and one album's chapters?
+
+    private var spiking = false
+
+    /// Open an artist page in the player first, then tap SPIKE. Every step is logged with "SPIKE".
+    func runSpike() {
+        guard !spiking else { return }
+        spiking = true
+        Task { await spike(); spiking = false }
+    }
+
+    private func js(_ s: String) async -> String {
+        guard let r = try? await webView.evaluateJavaScript(s) else { return "?" }
+        return r as? String ?? String(describing: r)
+    }
+
+    private func spikeLoad(_ url: URL) async {
+        note("SPIKE load \(url.absoluteString)")
+        requested = url
+        webView.load(URLRequest(url: url))
+        try? await Task.sleep(for: .seconds(1))
+        for _ in 0..<40 {
+            if !webView.isLoading { break }
+            try? await Task.sleep(for: .seconds(0.5))
+        }
+        try? await Task.sleep(for: .seconds(5))  // the page fetches its data after didFinish
+    }
+
+    /// One log line per recorded JSON response (see js/src/spotify-spy.js), then the recorder is empty again.
+    private func spikeDrain(_ label: String) async {
+        let raw = (try? await webView.evaluateJavaScript("window.__nvSpy ? window.__nvSpy.drain() : []")) as? [String] ?? []
+        note("SPIKE \(label): \(raw.count) JSON responses")
+        for r in raw { note("SPIKE spy \(r)") }
+    }
+
+    private func spike() async {
+        let parts = (webView.url?.path ?? "").split(separator: "/").map(String.init)
+        guard let i = parts.firstIndex(of: "artist"), i + 1 < parts.count,
+              let discography = URL(string: "/artist/\(parts[i + 1])/discography/all", relativeTo: webView.url)?.absoluteURL else {
+            note("SPIKE stop: open an artist page (/artist/<id>) in the player first")
+            return
+        }
+        _ = try? await webView.evaluateJavaScript("window.__nvSpy ? window.__nvSpy.drain().length : 0")  // discard what the current page recorded
+
+        // 1. All albums: does one load return everything, or does scrolling page it in?
+        await spikeLoad(discography)
+        await spikeDrain("discography first load")
+        var last = "", same = 0
+        for n in 1...30 {
+            let r = await js("""
+                (() => {
+                  for (const e of document.querySelectorAll('*')) if (e.scrollHeight > e.clientHeight + 50) e.scrollTop = e.scrollHeight;
+                  window.scrollTo(0, document.body.scrollHeight);
+                  let h = 0; for (const e of document.querySelectorAll('*')) h = Math.max(h, e.scrollHeight);
+                  const root = document.querySelector('main') || document;  // not the sidebar library
+                  return new Set([...root.querySelectorAll('a[href*="/album/"]')].map(a => a.getAttribute('href'))).size + ' links, tallest element ' + h + ' px';
+                })()
+                """)
+            same = r == last ? same + 1 : 0
+            last = r
+            note("SPIKE scroll \(n): \(r)")
+            if same >= 3 { break }  // the count stopped growing
+            try? await Task.sleep(for: .seconds(1.5))
+        }
+        await spikeDrain("discography after scrolling")
+
+        // 2. One album's chapters, from the first album link on the page.
+        let href = await js("(() => { const a = (document.querySelector('main') || document).querySelector('a[href*=\"/album/\"]'); return a ? a.getAttribute('href') : ''; })()")
+        guard !href.isEmpty, let album = URL(string: href, relativeTo: webView.url)?.absoluteURL else {
+            note("SPIKE stop: no album link found on the discography page")
+            return
+        }
+        await spikeLoad(album)
+        await spikeDrain("album page")
+        let rows = await js("""
+            (() => { const r = [...document.querySelectorAll('[data-testid="tracklist-row"]')];
+              return r.length + ' rendered: ' + r.slice(0, 40).map(x => x.textContent.slice(0, 50)).join(' | '); })()
+            """)
+        note("SPIKE rows: " + rows)
+
+        // 3. Play it and see whether the next track follows in order.
+        let play = await js("""
+            (() => { const b = document.querySelector('[data-testid="action-bar-row"] [data-testid="play-button"]') || document.querySelector('main [data-testid="play-button"]');
+              if (!b) return 'play button NOT found'; b.click(); return 'play button clicked, label=' + (b.getAttribute('aria-label') || ''); })()
+            """)
+        note("SPIKE play: " + play)
+        try? await Task.sleep(for: .seconds(5))
+        let afterPlay = await js("window.__nv ? window.__nv.state() : 'no hook'")
+        note("SPIKE after play: " + afterPlay)
+        let next = await js("window.__nv ? window.__nv.cmd('nexttrack') : 'no hook'")
+        note("SPIKE next: " + next)
+        try? await Task.sleep(for: .seconds(4))
+        let afterNext = await js("window.__nv ? window.__nv.state() : 'no hook'")
+        note("SPIKE after next: " + afterNext)
+        await spikeDrain("playback")
+        note("SPIKE done")
+    }
+
     func webView(_ w: WKWebView, createWebViewWith cfg: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if action.targetFrame == nil { w.load(action.request) }
@@ -175,6 +280,7 @@ struct SpotifyOverlay: View {
             HStack {
                 Text("Spotify").font(.headline)
                 Spacer()
+                Button("SPIKE") { player.runSpike() }.font(.caption).frame(minHeight: Theme.hit) // SPIKE (#17), temporary
                 Button("Done") { show = false }.frame(minWidth: Theme.hit, minHeight: Theme.hit)
             }
             .padding(.horizontal, Theme.pad)
