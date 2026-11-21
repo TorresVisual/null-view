@@ -27,7 +27,9 @@ final class SpotifyCatalog: ObservableObject {
     /// Which of the two grid lists is showing, and whether listened ones are hidden (issue #19). Kept here, not in
     /// the grid view, which is rebuilt every time an album is closed.
     @Published var shelf = Shelf.folgen
-    @Published var hideListened = false
+    @Published var hideListened = UserDefaults.standard.bool(forKey: "spotifyHideListened") {
+        didSet { UserDefaults.standard.set(hideListened, forKey: "spotifyHideListened") }
+    }
     /// Flips the picked list (Folgen then run from the latest down to 1). Remembered across launches.
     @Published var reversed = UserDefaults.standard.bool(forKey: "spotifyReversed") {
         didSet { UserDefaults.standard.set(reversed, forKey: "spotifyReversed") }
