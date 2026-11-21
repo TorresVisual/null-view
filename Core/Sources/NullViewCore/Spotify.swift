@@ -48,6 +48,7 @@ public enum SpotifyLink {
 /// "Spotify changed its format": `missing` is the path of the first required key that was not there.
 public struct SpotifyFormatError: Error, Equatable {
     public let missing: String
+    public init(missing: String) { self.missing = missing }
 }
 
 public struct SpotifyDiscographyPage: Equatable {

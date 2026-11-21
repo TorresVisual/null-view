@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import NullViewCore
 
 /// Spotify: its own WebView so the desktop user agent is fixed before the first load.
 /// Putting it on the main view failed: after visiting another site, Spotify got the iPhone UA again.
