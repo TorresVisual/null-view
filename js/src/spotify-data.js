@@ -28,6 +28,8 @@
       const url = String(input?.url ?? input);
       const req = typeof init?.body === 'string' ? init.body.slice(0, 500) : '';
       p.then((r) => {
+        // A refused request never reaches `record` (not JSON): say so, or a throttled page looks like a stuck one.
+        if (!r.ok && OPS.test(req + ' ' + url)) stopLog.push(`album request refused: HTTP ${r.status}`);
         const ct = r.headers.get('content-type') || '';
         if (/json/i.test(ct)) r.clone().text().then((t) => record(url, req, ct, t), () => {});
       }, () => {});

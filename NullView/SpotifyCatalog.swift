@@ -154,7 +154,10 @@ final class SpotifyCatalog: ObservableObject {
                 if artist.albums.count - start >= 40 { grid = .ready; return }
                 if stale >= 8 { reloadNext = true; grid = .failed("No more albums came back (\(artist.albums.count) of \(artist.total ?? 0); last scroll: \(lastScroll))."); return }
                 // The unread albums sit at about count/total of the way down the page's list.
-                lastScroll = await scrollTo(Double(artist.albums.count) / Double(max(artist.total ?? 1, 1)), "albums \(artist.albums.count)/\(artist.total ?? 0)")
+                // Every other attempt goes a little back up: the same scrollTop again fires no scroll event, and the
+                // page only pages in on one (the log showed the same position seven times and no new albums).
+                let f = Double(artist.albums.count) / Double(max(artist.total ?? 1, 1))
+                lastScroll = await scrollTo(stale % 2 == 1 ? max(0, f - 0.05) : f, "albums \(artist.albums.count)/\(artist.total ?? 0)")
             }
             guard await pause(1.0) else { return }
         }
