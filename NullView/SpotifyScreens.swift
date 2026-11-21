@@ -32,8 +32,9 @@ private struct AlbumGridView: View {
                 if catalog.grid.isLoading { ProgressView().controlSize(.large) }
                 Spacer()
             } else {
+                // Pinned, not the scroll view's first row: there it rendered as nothing on the phone (issue #22).
+                filters
                 ScrollView {
-                    filters
                     LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.pad) {
                         ForEach(catalog.shown) { album in
                             let heard = catalog.isListened(album)
@@ -72,6 +73,8 @@ private struct AlbumGridView: View {
             }
             .padding(.horizontal, Theme.pad)
         }
+        // [DEBUG-f1] where the filter block ends up; remove once the phone log shows it laid out.
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { catalog.debugLog("[DEBUG-f1] filters frame \($0) albums \(catalog.albums.count)") }
     }
 
     @ViewBuilder private var chips: some View {
