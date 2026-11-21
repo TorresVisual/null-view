@@ -182,8 +182,7 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         Task {
             await spike()
             spiking = false
-            UIPasteboard.general.string = spikeLog.joined(separator: "
-")
+            UIPasteboard.general.string = spikeLog.joined(separator: "\n")
             note("SPIKE copied \(spikeLog.count) lines to the clipboard")
         }
     }
