@@ -97,6 +97,7 @@ final class SpotifyCatalog: ObservableObject {
 
     private static let discographyURL = URL(string: "https://open.spotify.com/artist/\(SpotifyLink.artistID)/discography/all")!
     /// The page loads this many albums by itself (7 pages of 20); the rest only when the grid is scrolled to them.
+    private var reloadNext = false   // set when the page stalled: the next attempt (Retry) starts from a fresh page
     private var onDiscography: Bool { player.webView.url?.path.contains("/discography") == true }
 
     /// First load: opens the discography in the hidden player and lets it settle. Does not scroll.
@@ -120,33 +121,44 @@ final class SpotifyCatalog: ObservableObject {
         let first = artist.albums.isEmpty
         grid = .loading(first ? "Opening Spotify…" : "Loading more albums…")
         _ = await drain()
-        if first || !onDiscography { await player.load(Self.discographyURL) }
+        let reloaded = first || !onDiscography || reloadNext
+        reloadNext = false
+        if reloaded { await player.load(Self.discographyURL) }
         let start = artist.albums.count
-        var stale = 0, lastScroll = ""
+        var stale = 0, quiet = 0, lastScroll = ""
+        var settled = !reloaded   // a page we did not just load already delivered its first batch
         for step in 0..<40 {
             let before = artist.albums.count
+            var got = 0
             do {
-                for r in await drain() where r.op != "getAlbum" { artist.add(try SpotifyDecoder.discography(Data(r.text.utf8))) }
+                for r in await drain() where r.op != "getAlbum" { artist.add(try SpotifyDecoder.discography(Data(r.text.utf8))); got += 1 }
             } catch { return fail(&grid, error) }
             albums = artist.sorted
             albumTotal = artist.total
             if artist.isComplete { grid = .ready; return }
-            stale = artist.albums.count == before ? stale + 1 : 0
+            // `quiet`: steps since the page last sent anything. A freshly loaded page delivers its first batch (about 140)
+            // in bursts with pauses; moving it before it is quiet left it stuck at 60 of 313 (found on the phone, #19).
+            quiet = got == 0 ? quiet + 1 : 0
+            if quiet >= 6 { settled = true }   // latched: later bursts are the answer to our own scrolls
+            if settled { stale = artist.albums.count == before ? stale + 1 : 0 }
             if step >= 12, artist.total == nil { return fail(&grid, SpotifyFormatError(missing: "discography totalCount")) }
             if first {
-                // The first batch comes by itself; once it stops growing, show it and wait for the user to scroll.
-                if !artist.albums.isEmpty, artist.total != nil, stale >= 3 { grid = .ready; return }
+                // The first batch comes by itself; once the page is quiet, show it and carry on from there.
+                if !artist.albums.isEmpty, artist.total != nil, quiet >= 6 { grid = .ready; return }
                 if stale >= 25 { grid = .failed("Spotify sent no albums."); return }
             } else {
                 // Not "links stopped changing" as the end: Spotify's own total decides completeness (isComplete).
+                if !settled { guard await pause(1.0) else { return }; continue }
                 if artist.albums.count - start >= 40 { grid = .ready; return }
-                if stale >= 8 { grid = .failed("No more albums came back (\(artist.albums.count) of \(artist.total ?? 0); last scroll: \(lastScroll))."); return }
+                if stale >= 8 { reloadNext = true; grid = .failed("No more albums came back (\(artist.albums.count) of \(artist.total ?? 0); last scroll: \(lastScroll))."); return }
                 // The unread albums sit at about count/total of the way down the page's list.
                 lastScroll = await scrollTo(Double(artist.albums.count) / Double(max(artist.total ?? 1, 1)), "albums \(artist.albums.count)/\(artist.total ?? 0)")
             }
             guard await pause(1.0) else { return }
         }
-        grid = first && !artist.albums.isEmpty ? .ready : .failed("Stopped after \(artist.albums.count) of \(artist.total ?? 0) albums.")
+        if first && !artist.albums.isEmpty { grid = .ready; return }
+        reloadNext = true
+        grid = .failed("Stopped after \(artist.albums.count) of \(artist.total ?? 0) albums.")
     }
 
     // MARK: Chapters
