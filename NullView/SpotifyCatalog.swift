@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import NullViewCore
 
@@ -20,8 +21,20 @@ enum SpotifyPhase: Equatable {
 @MainActor
 final class SpotifyCatalog: ObservableObject {
     @Published private(set) var grid: SpotifyPhase = .idle
-    @Published private(set) var albums: [SpotifyAlbum] = []
+    @Published private(set) var albums: [SpotifyAlbum] = [] { didSet { shelves = SpotifyShelves(albums) } }
+    @Published private(set) var shelves = SpotifyShelves([])
     @Published private(set) var albumTotal: Int?
+    /// Which of the two grid lists is showing, and whether listened ones are hidden (issue #19). Kept here, not in
+    /// the grid view, which is rebuilt every time an album is closed.
+    @Published var shelf = Shelf.folgen
+    @Published var hideListened = false
+    /// Album ids the user has heard: ticked by hand, or by the last chapter becoming the current track.
+    @Published private(set) var listened: Set<String>
+
+    enum Shelf: String, CaseIterable, Identifiable {
+        case folgen = "Folgen", specials = "Specials"
+        var id: String { rawValue }
+    }
     @Published private(set) var album: SpotifyAlbum?
     @Published private(set) var detail: SpotifyPhase = .idle
     @Published private(set) var chapters: [SpotifyChapter] = []
@@ -39,7 +52,39 @@ final class SpotifyCatalog: ObservableObject {
     private var artist = SpotifyArtistPage()   // everything read so far; the grid shows it newest first
     private var complete: [String: [SpotifyChapter]] = [:]   // chapter lists that reached their full count, by album id
 
-    init(player: SpotifyPlayer) { self.player = player }
+    private var nowPlaying: SpotifyAlbum?   // the album last played from here; its last chapter marks it listened
+    private var titleWatch: AnyCancellable?
+
+    init(player: SpotifyPlayer) {
+        self.player = player
+        listened = player.listened.listened()
+        titleWatch = player.$title.removeDuplicates().sink { [weak self] title in
+            MainActor.assumeIsolated { self?.trackChanged(title) }
+        }
+    }
+
+    // MARK: Listened (issue #19)
+
+    func isListened(_ album: SpotifyAlbum) -> Bool { listened.contains(album.id) }
+
+    func setListened(_ album: SpotifyAlbum, _ on: Bool) {
+        if on { listened.insert(album.id) } else { listened.remove(album.id) }
+        player.listened.setListened(album.id, on)
+    }
+
+    /// The albums in the picked list. Not a stored copy: it follows `shelves`, `listened` and the toggle.
+    var shown: [SpotifyAlbum] {
+        (shelf == .folgen ? shelves.folgen : shelves.specials).filter { !hideListened || !listened.contains($0.id) }
+    }
+
+    /// Fires on a change of the player's title only, so unticking while the last chapter still plays sticks.
+    /// Only albums whose full chapter list was read can be judged (a partial list has the wrong "last").
+    private func trackChanged(_ title: String) {
+        guard let album = nowPlaying, !listened.contains(album.id), let chapters = complete[album.id],
+              SpotifyListened.endsAlbum(title: title, chapters: chapters) else { return }
+        player.note("spotify listened: \(album.name)")
+        setListened(album, true)
+    }
 
     // MARK: Album grid
 
@@ -54,14 +99,15 @@ final class SpotifyCatalog: ObservableObject {
         task = Task { await fetchAlbums() }
     }
 
-    /// Called when the grid's last tiles scroll into view. Positions the hidden page at the next unread albums.
+    /// Positions the hidden page at the next unread albums. The grid calls it whenever it is showing and not
+    /// complete, so all of them load (issue #19): the Folgen list starts at Folge 1, the oldest album, which
+    /// Spotify lists last. Not while audio plays: moving the hidden page to the discography reloads it and would
+    /// stop the album (decisions.md "Spotify"); it resumes the next time the grid appears with nothing playing.
     func loadMore() {
-        guard album == nil, grid == .ready, !artist.albums.isEmpty, !artist.isComplete else { return }
+        guard album == nil, grid == .ready, !player.playing, !artist.albums.isEmpty, !artist.isComplete else { return }
         task?.cancel()
         task = Task { await fetchAlbums() }
     }
-
-    func isNearEnd(_ a: SpotifyAlbum) -> Bool { albums.suffix(12).contains { $0.id == a.id } }
 
     private func fetchAlbums() async {
         let first = artist.albums.isEmpty
@@ -154,6 +200,7 @@ final class SpotifyCatalog: ObservableObject {
     func play(_ chapter: SpotifyChapter) {
         guard let album else { return }
         task?.cancel()
+        nowPlaying = album
         task = Task {
             await showAlbumPage(album)
             for _ in 0..<40 {
@@ -171,6 +218,7 @@ final class SpotifyCatalog: ObservableObject {
     func playAlbum() {
         guard let album else { return }
         task?.cancel()
+        nowPlaying = album
         task = Task {
             await showAlbumPage(album)
             let r = await player.eval("window.__nvSpotify ? window.__nvSpotify.playAlbum() : 'no recorder'") as? String ?? "?"

@@ -5,7 +5,7 @@ import NullViewCore
 /// `LibraryStore` on SQLite via GRDB (decisions.md "Persistence and library"). Dumb storage only:
 /// every rule is in `NullViewCore.Library`, which is tested on Windows. This file can only be
 /// compiled on the runner (GRDB needs a system SQLite).
-final class LibraryDB: LibraryStore, SiteStore {
+final class LibraryDB: LibraryStore, SiteStore, ListenedStore {
     private let db: DatabaseQueue
 
     init() throws {
@@ -28,6 +28,7 @@ final class LibraryDB: LibraryStore, SiteStore {
                 try db.execute(sql: "ALTER TABLE queue ADD COLUMN title TEXT NOT NULL DEFAULT ''")
             }
             try db.execute(sql: "CREATE TABLE IF NOT EXISTS site (url TEXT PRIMARY KEY, name TEXT NOT NULL, opens INTEGER NOT NULL, at REAL NOT NULL)")
+            try db.execute(sql: "CREATE TABLE IF NOT EXISTS listened (album TEXT PRIMARY KEY)")   // Spotify albums heard (issue #19)
         }
     }
 
@@ -100,4 +101,13 @@ extension LibraryDB {
             [s.url, s.name, s.opens, s.lastOpened.timeIntervalSince1970])
     }
     func deleteSite(url: String) { run("DELETE FROM site WHERE url = ?", [url]) }
+}
+
+// MARK: ListenedStore (Spotify albums heard, issue #19)
+
+extension LibraryDB {
+    func listened() -> Set<String> { Set(rows("SELECT album FROM listened").map { $0["album"] as String }) }
+    func setListened(_ albumID: String, _ on: Bool) {
+        run(on ? "INSERT OR IGNORE INTO listened (album) VALUES (?)" : "DELETE FROM listened WHERE album = ?", [albumID])
+    }
 }

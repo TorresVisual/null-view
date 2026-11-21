@@ -29,23 +29,44 @@ private struct AlbumGridView: View {
                 if catalog.grid.isLoading { ProgressView().controlSize(.large) }
                 Spacer()
             } else {
+                filters
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: Theme.gap) {
-                        ForEach(catalog.albums) { album in
-                            Button { catalog.open(album) } label: { tile(album) }
+                        ForEach(catalog.shown) { album in
+                            let heard = catalog.isListened(album)
+                            Button { catalog.open(album) } label: { tile(album, heard: heard) }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel("\(album.name), \(album.year)")
-                                .onAppear { if catalog.isNearEnd(album) { catalog.loadMore() } }
+                                .accessibilityLabel("\(album.name), \(album.year)" + (heard ? ", listened" : ""))
+                                .contextMenu {
+                                    Button { catalog.setListened(album, !heard) } label: {
+                                        Label(heard ? "Mark as not listened" : "Mark as listened", systemImage: heard ? "circle" : "checkmark.circle")
+                                    }
+                                }
                         }
                     }
                     .padding(Theme.pad)
                     if let total = catalog.albumTotal, catalog.albums.count < total {
-                        Text("\(catalog.albums.count) of \(total) albums. More load as you scroll.")
+                        Text("\(catalog.albums.count) of \(total) albums loaded. The rest load by themselves (not while something plays); Folgen fill in back to Folge 1.")
                             .font(.footnote).foregroundStyle(.secondary).padding(.bottom, Theme.pad)
                     }
                 }
             }
         }
+        // All albums load by themselves: the Folgen list has to reach Folge 1, which Spotify lists last.
+        .onAppear { catalog.loadMore() }
+        .onChange(of: catalog.grid) { _, now in if now == .ready { catalog.loadMore() } }
+    }
+
+    private var filters: some View {
+        VStack(spacing: Theme.gap) {
+            Picker("List", selection: $catalog.shelf) {
+                Text("Folgen \(catalog.shelves.folgen.count)").tag(SpotifyCatalog.Shelf.folgen)
+                Text("Specials \(catalog.shelves.specials.count)").tag(SpotifyCatalog.Shelf.specials)
+            }
+            .pickerStyle(.segmented)
+            Toggle("Hide listened", isOn: $catalog.hideListened).frame(minHeight: Theme.hit)
+        }
+        .padding(.horizontal, Theme.pad)
     }
 
     @ViewBuilder private var status: some View {
@@ -60,9 +81,15 @@ private struct AlbumGridView: View {
         }
     }
 
-    private func tile(_ album: SpotifyAlbum) -> some View {
+    private func tile(_ album: SpotifyAlbum, heard: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Cover(url: album.coverURL)
+                .opacity(heard ? 0.35 : 1)
+                .overlay(alignment: .topTrailing) {
+                    if heard {
+                        Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(Theme.paper).padding(6)
+                    }
+                }
             Text(album.name).font(.caption).lineLimit(2).multilineTextAlignment(.leading)
             Text(String(album.year)).font(.caption2).foregroundStyle(.secondary)
         }
@@ -104,6 +131,13 @@ private struct ChapterListView: View {
 
             Button { catalog.playAlbum() } label: {
                 Label("Play, or resume where you left off", systemImage: "play.fill").frame(minHeight: Theme.hit)
+            }
+            .listRowBackground(Color.clear)
+
+            let heard = catalog.isListened(album)
+            Button { catalog.setListened(album, !heard) } label: {
+                Label(heard ? "Listened. Tap to untick" : "Mark as listened", systemImage: heard ? "checkmark.circle.fill" : "circle")
+                    .frame(minHeight: Theme.hit)
             }
             .listRowBackground(Color.clear)
 

@@ -92,12 +92,14 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
 
     let webView: WKWebView
     let note: (String) -> Void
+    let listened: ListenedStore   // which albums the user has heard (issue #19), read by `SpotifyCatalog`
     private var requested: URL?
     /// True while the web page itself is shown (fallback, or a link that is not the native grid's).
     @Published var showPage = false
     private(set) lazy var catalog = SpotifyCatalog(player: self)
 
-    init(note: @escaping (String) -> Void) {
+    init(listened: ListenedStore, note: @escaping (String) -> Void) {
+        self.listened = listened
         self.note = note
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true

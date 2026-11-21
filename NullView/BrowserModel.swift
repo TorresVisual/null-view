@@ -51,12 +51,13 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         pk.webView = webView
         picker = pk
         detector = det
-        spotify = SpotifyPlayer { [weak det] in det?.note($0) }
+        let db = try? LibraryDB()
+        let listenedStore: ListenedStore = db ?? MemoryListenedStore()
+        spotify = SpotifyPlayer(listened: listenedStore) { [weak det] in det?.note($0) }
         let scripts = [videoScript, VideoDetector.makeFullscreenHook()].compactMap { $0 }
         blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: scripts)
         det.webView = webView
         videoMode = VideoMode(detector: det, webView: webView)
-        let db = try? LibraryDB()
         let store: LibraryStore = db ?? MemoryLibraryStore()
         let siteStore: SiteStore = db ?? MemorySiteStore()
         sites = Sites(store: siteStore)
