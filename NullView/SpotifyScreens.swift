@@ -46,11 +46,6 @@ private struct AlbumGridView: View {
                     }
                     .padding(Theme.pad)
                 }
-                // Outside the ScrollView: inside, it printed over the covers when Hide listened shrank the grid.
-                if let total = catalog.albumTotal, catalog.albums.count < total {
-                    Text("\(catalog.albums.count) of \(total) albums loaded. The rest load by themselves (not while something plays); Folgen fill in back to Folge 1.")
-                        .font(.footnote).foregroundStyle(.secondary).padding(Theme.pad)
-                }
             }
         }
         // All albums load by themselves: the Folgen list has to reach Folge 1, which Spotify lists last.
