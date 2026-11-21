@@ -88,9 +88,6 @@ final class SpotifyCatalog: ObservableObject {
         return reversed ? list.reversed() : list
     }
 
-    /// [DEBUG-f1] temporary: a line in the in-app log from the grid view.
-    func debugLog(_ line: String) { player.note(line) }
-
     /// The cover of the album the player says it is playing, for the player capsule (issue #22): matched by name among
     /// the albums read so far. nil when unknown (the player only reports a title string), and the capsule shows a plain tile.
     func cover(forAlbum name: String?) -> URL? {
