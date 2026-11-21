@@ -210,6 +210,10 @@ final class SpotifyCatalog: ObservableObject {
             if stale >= 25 { break }
             // An album over 50 chapters: the page asks for the rest (offset 50) as its list is scrolled.
             if !chapters.isEmpty { detail = .loading("Loading chapters \(chapters.count) of \(list.expected)") }
+            // Last rendered row to the bottom first, then past it: what pages in chapters 51 and up is Spotify's business
+            // (the spike never saw it), so the log says which rows the page has.
+            let rows = await player.eval("window.__nvSpotify ? window.__nvSpotify.revealLast() : 'no recorder'") as? String ?? "?"
+            player.note("spotify chapters \(chapters.count)/\(list.expected), \(rows)")
             await scrollStep("chapters \(chapters.count)/\(list.expected)")
             guard await pause(1.2) else { return }
         }

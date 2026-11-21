@@ -102,6 +102,16 @@ test('scrollTo puts the scroller at a fraction of its range, for any scroller ar
   assert.equal(await page.evaluate(() => window.__nvSpotify.scrollTo(0.5)), 'none');
 });
 
+test('revealLast scrolls the last rendered chapter row to the bottom and reports the rows', async () => {
+  await page.setContent(`<main id="m" style="height:200px;overflow:auto" aria-rowcount="55">
+    ${[2, 3, 4, 5, 6].map((i) => `<div data-testid="tracklist-row" aria-rowindex="${i}" style="height:150px">row ${i}</div>`).join('')}</main>`);
+  const r = await page.evaluate(() => [window.__nvSpotify.revealLast(), document.getElementById('m').scrollTop]);
+  assert.equal(r[0], 'rows=5 last=6 rowcount=55');
+  assert.equal(r[1], 550);                                  // 5 * 150 - 200: the last row ends at the bottom of the view
+  await page.setContent('<p>no rows</p>');
+  assert.equal(await page.evaluate(() => window.__nvSpotify.revealLast()), 'rows=0 last=none rowcount=?');
+});
+
 test('playChapter clicks the row found by its track link, falls back to the row index, and says when it is not rendered', async () => {
   await page.setContent(`<main>
     <div data-testid="tracklist-row" aria-rowindex="2"><a href="/track/AAA">Teil 1</a><button aria-label="Play Teil 1" onclick="window.hit='A'"></button></div>

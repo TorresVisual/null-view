@@ -115,6 +115,15 @@
       for (const e of els) e.scrollTop = end ? 0 : e.scrollTop + e.clientHeight * 0.5;
       return `${end ? 'wrapped' : 'step'} top=${Math.round(main.scrollTop)} of ${main.scrollHeight} client=${main.clientHeight} el=${describe(main)}`;
     },
+    /** Brings the last chapter row that is rendered to the bottom of the view, so what a long album's list pages in
+     *  next (chapters 51 and up) sits just past it. Reports the rows the page has, for the in-app log. */
+    revealLast() {
+      const rows = [...document.querySelectorAll('[data-testid="tracklist-row"]')];
+      const last = rows[rows.length - 1];
+      if (last) last.scrollIntoView({ block: 'end' });
+      const count = document.querySelector('[aria-rowcount]')?.getAttribute('aria-rowcount');
+      return `rows=${rows.length} last=${last ? last.getAttribute('aria-rowindex') : 'none'} rowcount=${count ?? '?'}`;
+    },
     /** Every scroller to `f` (0 to 1) of its range: the list's items sit at about their index / total of the way down.
      *  Returns where the longest one ended up, or 'none'. */
     scrollTo(f) {
