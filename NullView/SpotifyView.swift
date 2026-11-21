@@ -1,11 +1,13 @@
 import SwiftUI
 import WebKit
 
-/// SPIKE (Spotify): its own WebView so the desktop user agent is fixed before the first load.
+/// Spotify: its own WebView so the desktop user agent is fixed before the first load.
 /// Putting it on the main view failed: after visiting another site, Spotify got the iPhone UA again.
 /// Why: the free phone app only shuffles albums; the desktop web player plays them in order.
 /// Shares cookies with the main browser (default data store). No content blocker here: Spotify's
 /// ads are inserted into the audio stream, so the blocker cannot remove them anyway.
+/// Since #18 the page is mostly hidden: `SpotifyCatalog` reads its JSON for the native screens and clicks its
+/// play buttons, and the page itself is the fallback view (`showPage`).
 @MainActor
 final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate {
     nonisolated static func isSpotify(_ url: URL) -> Bool {
@@ -88,8 +90,11 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
     @Published private(set) var canGoForward = false
 
     let webView: WKWebView
-    private let note: (String) -> Void
+    let note: (String) -> Void
     private var requested: URL?
+    /// True while the web page itself is shown (fallback, or a link that is not the native grid's).
+    @Published var showPage = false
+    private(set) lazy var catalog = SpotifyCatalog(player: self)
 
     init(note: @escaping (String) -> Void) {
         self.note = note
@@ -99,12 +104,13 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         // Not .desktop: the log showed it never took effect (platform stayed iPhone); the Mac UA alone is what Spotify reads.
         cfg.userContentController.addUserScript(WKUserScript(source: Self.fitViewport, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         cfg.userContentController.addUserScript(WKUserScript(source: Self.playerHook, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        // SPIKE (#17): records Spotify's own JSON responses; read back by runSpike(). Page world, no message handler.
-        if let u = Bundle.main.url(forResource: "spotify-spy", withExtension: "js"),
+        // #18: records the page's own JSON for the album grid and chapter list (read by SpotifyCatalog) and
+        // carries the scroll and click commands. Page world, no message handler.
+        if let u = Bundle.main.url(forResource: "spotify-data", withExtension: "js"),
            let src = try? String(contentsOf: u, encoding: .utf8) {
             cfg.userContentController.addUserScript(WKUserScript(source: src, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
         } else {
-            note("spotify-spy.js missing from the app bundle")
+            note("spotify-data.js missing from the app bundle")
         }
         // Track changes are driven by page timers; a page that thinks it is hidden gets them throttled,
         // which stalls the hop to the next track (locked screen, closed overlay).
@@ -120,11 +126,32 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         webView.uiDelegate = self
     }
 
-    /// Loads `url` unless it is already showing, so reopening the sheet never interrupts playback.
+    /// The artist and home links show the native grid. Anything else (an album, a playlist, another artist)
+    /// loads in the web page and shows it, unless it is already showing, so reopening never interrupts playback.
     func open(_ url: URL) {
+        guard SpotifyLink.destination(for: url) == .page else { showPage = false; return }
+        showPage = true
         guard url != requested else { return }
         requested = url
         webView.load(URLRequest(url: url))
+    }
+
+    /// Loads `url` and waits for the load to finish. The page fetches its data after that: callers poll the recorder.
+    func load(_ url: URL) async {
+        requested = url
+        webView.load(URLRequest(url: url))
+        try? await Task.sleep(for: .seconds(1))
+        var waited = 0
+        while webView.isLoading, waited < 40 { try? await Task.sleep(for: .seconds(0.5)); waited += 1 }
+    }
+
+    /// Evaluates a script that returns a string, or any JSON-like value; "?" when it threw.
+    func eval(_ script: String) async -> Any? { try? await webView.evaluateJavaScript(script) }
+
+    /// Calls a function body in the page world with named arguments (no string splicing). "?" when it threw.
+    func call(_ body: String, _ args: [String: Any]) async -> String {
+        let r = try? await webView.callAsyncJavaScript(body, arguments: args, in: nil, contentWorld: .page)
+        return r as? String ?? "?"
     }
 
     func webView(_ w: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
@@ -163,117 +190,6 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
         }
     }
 
-    // MARK: SPIKE (#17), temporary: what JSON does the page load for an artist's albums and one album's chapters?
-
-    private var spiking = false
-    private var spikeLog: [String] = []
-
-    /// Logs a SPIKE line and keeps it for the clipboard (the log view shows only the last 15 lines).
-    private func spikeNote(_ s: String) {
-        note(s)
-        spikeLog.append(s)
-    }
-
-    /// Open an artist page in the player first, then tap SPIKE. Every step is logged with "SPIKE".
-    func runSpike() {
-        guard !spiking else { return }
-        spiking = true
-        spikeLog = []
-        Task {
-            await spike()
-            spiking = false
-            UIPasteboard.general.string = spikeLog.joined(separator: "\n")
-            note("SPIKE copied \(spikeLog.count) lines to the clipboard")
-        }
-    }
-
-    private func js(_ s: String) async -> String {
-        guard let r = try? await webView.evaluateJavaScript(s) else { return "?" }
-        return r as? String ?? String(describing: r)
-    }
-
-    private func spikeLoad(_ url: URL) async {
-        spikeNote("SPIKE load \(url.absoluteString)")
-        requested = url
-        webView.load(URLRequest(url: url))
-        try? await Task.sleep(for: .seconds(1))
-        for _ in 0..<40 {
-            if !webView.isLoading { break }
-            try? await Task.sleep(for: .seconds(0.5))
-        }
-        try? await Task.sleep(for: .seconds(5))  // the page fetches its data after didFinish
-    }
-
-    /// One log line per recorded JSON response (see js/src/spotify-spy.js), then the recorder is empty again.
-    private func spikeDrain(_ label: String) async {
-        let raw = (try? await webView.evaluateJavaScript("window.__nvSpy ? window.__nvSpy.drain() : []")) as? [String] ?? []
-        spikeNote("SPIKE \(label): \(raw.count) JSON responses")
-        for r in raw { spikeNote("SPIKE spy \(r)") }
-    }
-
-    private func spike() async {
-        let parts = (webView.url?.path ?? "").split(separator: "/").map(String.init)
-        guard let i = parts.firstIndex(of: "artist"), i + 1 < parts.count,
-              let discography = URL(string: "/artist/\(parts[i + 1])/discography/all", relativeTo: webView.url)?.absoluteURL else {
-            spikeNote("SPIKE stop: open an artist page (/artist/<id>) in the player first")
-            return
-        }
-        _ = try? await webView.evaluateJavaScript("window.__nvSpy ? window.__nvSpy.drain().length : 0")  // discard what the current page recorded
-
-        // 1. All albums: does one load return everything, or does scrolling page it in?
-        await spikeLoad(discography)
-        await spikeDrain("discography first load")
-        var last = "", same = 0
-        for n in 1...30 {
-            let r = await js("""
-                (() => {
-                  for (const e of document.querySelectorAll('*')) if (e.scrollHeight > e.clientHeight + 50) e.scrollTop = e.scrollHeight;
-                  window.scrollTo(0, document.body.scrollHeight);
-                  let h = 0; for (const e of document.querySelectorAll('*')) h = Math.max(h, e.scrollHeight);
-                  const root = document.querySelector('main') || document;  // not the sidebar library
-                  return new Set([...root.querySelectorAll('a[href*="/album/"]')].map(a => a.getAttribute('href'))).size + ' links, tallest element ' + h + ' px';
-                })()
-                """)
-            same = r == last ? same + 1 : 0
-            last = r
-            spikeNote("SPIKE scroll \(n): \(r)")
-            if same >= 3 { break }  // the count stopped growing
-            try? await Task.sleep(for: .seconds(1.5))
-        }
-        await spikeDrain("discography after scrolling")
-
-        // 2. One album's chapters, from the first album link on the page.
-        let href = await js("(() => { const a = (document.querySelector('main') || document).querySelector('a[href*=\"/album/\"]'); return a ? a.getAttribute('href') : ''; })()")
-        guard !href.isEmpty, let album = URL(string: href, relativeTo: webView.url)?.absoluteURL else {
-            spikeNote("SPIKE stop: no album link found on the discography page")
-            return
-        }
-        await spikeLoad(album)
-        await spikeDrain("album page")
-        let rows = await js("""
-            (() => { const r = [...document.querySelectorAll('[data-testid="tracklist-row"]')];
-              return r.length + ' rendered: ' + r.slice(0, 40).map(x => x.textContent.slice(0, 50)).join(' | '); })()
-            """)
-        spikeNote("SPIKE rows: " + rows)
-
-        // 3. Play it and see whether the next track follows in order.
-        let play = await js("""
-            (() => { const b = document.querySelector('[data-testid="action-bar-row"] [data-testid="play-button"]') || document.querySelector('main [data-testid="play-button"]');
-              if (!b) return 'play button NOT found'; b.click(); return 'play button clicked, label=' + (b.getAttribute('aria-label') || ''); })()
-            """)
-        spikeNote("SPIKE play: " + play)
-        try? await Task.sleep(for: .seconds(5))
-        let afterPlay = await js("window.__nv ? window.__nv.state() : 'no hook'")
-        spikeNote("SPIKE after play: " + afterPlay)
-        let next = await js("window.__nv ? window.__nv.cmd('nexttrack') : 'no hook'")
-        spikeNote("SPIKE next: " + next)
-        try? await Task.sleep(for: .seconds(4))
-        let afterNext = await js("window.__nv ? window.__nv.state() : 'no hook'")
-        spikeNote("SPIKE after next: " + afterNext)
-        await spikeDrain("playback")
-        spikeNote("SPIKE done")
-    }
-
     func webView(_ w: WKWebView, createWebViewWith cfg: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if action.targetFrame == nil { w.load(action.request) }
@@ -285,20 +201,24 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
 /// page's timers, so closing a sheet stopped playback at the end of the current track.
 struct SpotifyOverlay: View {
     @ObservedObject var player: SpotifyPlayer
+    @ObservedObject var catalog: SpotifyCatalog   // observed here too: the header and banner read it
     @Binding var show: Bool
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Spotify").font(.headline)
-                Spacer()
-                Button("SPIKE") { player.runSpike() }.font(.caption).frame(minHeight: Theme.hit) // SPIKE (#17), temporary
-                Button("Done") { show = false }.frame(minWidth: Theme.hit, minHeight: Theme.hit)
+            header
+            if let why = catalog.formatProblem {
+                Banner(icon: "exclamationmark.triangle", text: "Spotify changed its format (\(why)). This is Spotify's own page instead.",
+                       buttonTitle: "Retry", buttonAction: { player.showPage = false; catalog.retry() })
             }
-            .padding(.horizontal, Theme.pad)
-            .background(.bar)
-            WebViewHost(webView: player.webView)
+            // The page stays in the tree behind the native screens: it plays the audio and is what the screens read.
+            ZStack {
+                WebViewHost(webView: player.webView)
+                    .opacity(player.showPage ? 1 : 0)
+                    .allowsHitTesting(player.showPage)
+                if !player.showPage { SpotifyScreens(catalog: catalog) }
+            }
             controls
         }
         .background(Color.black.ignoresSafeArea())
@@ -306,7 +226,28 @@ struct SpotifyOverlay: View {
         .allowsHitTesting(show)
         .accessibilityHidden(!show)
         .onReceive(tick) { _ in if show { player.refresh() } }
-        .onChange(of: show) { _, now in if now { player.refresh() } }
+        .onChange(of: show) { _, now in
+            guard now else { return }
+            player.refresh()
+            if !player.showPage { catalog.loadAlbums() }
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            if catalog.album != nil, !player.showPage {
+                button("chevron.backward", "Back to albums") { catalog.close() }
+            }
+            Text(catalog.album != nil && !player.showPage ? "Chapters" : "Spotify").font(.headline)
+            Spacer()
+            Button { player.showPage.toggle() } label: {
+                Image(systemName: player.showPage ? "square.grid.2x2" : "globe").frame(minWidth: Theme.hit, minHeight: Theme.hit)
+            }
+            .accessibilityLabel(player.showPage ? "Show albums" : "Show Spotify page")
+            Button("Done") { show = false }.frame(minWidth: Theme.hit, minHeight: Theme.hit)
+        }
+        .padding(.horizontal, Theme.pad)
+        .background(.bar)
     }
 
     /// The page's own controls are tiny at the fitted zoom, so these drive the player from outside.
@@ -315,7 +256,11 @@ struct SpotifyOverlay: View {
             Text(player.title).font(.caption).lineLimit(1).foregroundStyle(.secondary)
                 .padding(.horizontal, 16).padding(.top, 6)
             HStack {
-                button("chevron.backward", "Page back") { player.webView.goBack(); player.refresh() }.disabled(!player.canGoBack)
+                if player.showPage {
+                    button("chevron.backward", "Page back") { player.webView.goBack(); player.refresh() }.disabled(!player.canGoBack)
+                } else {
+                    Color.clear.frame(width: Theme.hit, height: Theme.hit)
+                }
                 Spacer()
                 button("backward.fill", "Previous track") { player.send("previoustrack") }
                 Spacer()
@@ -324,7 +269,11 @@ struct SpotifyOverlay: View {
                 Spacer()
                 button("forward.fill", "Next track") { player.send("nexttrack") }
                 Spacer()
-                button("chevron.forward", "Page forward") { player.webView.goForward(); player.refresh() }.disabled(!player.canGoForward)
+                if player.showPage {
+                    button("chevron.forward", "Page forward") { player.webView.goForward(); player.refresh() }.disabled(!player.canGoForward)
+                } else {
+                    Color.clear.frame(width: Theme.hit, height: Theme.hit)
+                }
             }
             .font(.title3)
             .padding(.horizontal, 16)

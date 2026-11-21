@@ -44,10 +44,14 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] The Sites button in the bottom toolbar opens the same grid as a sheet; tapping a tile closes it and loads the site.
 
 ## Spotify
-- [ ] Open `https://open.spotify.com/album/6UN8m07SmIzyDe63H0oljL` after visiting YouTube: the Spotify overlay opens fitted to the screen (sidebar, main area, right panel), pinch zooms in only. Log in with the free account.
-- [ ] Play the album: tracks go in order, the next one starts by itself, with and without the screen locked. Settings log shows `private pref ... applied`.
-- [ ] Bottom bar: play/pause, previous and next drive the player, the icon and chapter title follow it. Page back/forward move through the Spotify view's own history. If one does nothing, the log line `spotify <action> -> none` or `no hook` says why.
-- [ ] Done stops playback; opening the link again does not reload the page.
+- [ ] Open `https://open.spotify.com` after visiting YouTube (log in with the free account first if asked, via the globe button): the overlay shows the album grid of Die drei ??? with covers (no empty tiles), a "Loading albums n of 313" line while it fills, and no tile is disabled afterwards. Settings log has no `spotify format changed`.
+- [ ] Count: scroll the grid to the bottom and check the last (oldest) albums are there. 313 albums, no gaps (spot-check a few old ones around "Folge 20" to "Folge 40"). A fast fling at any point must not leave holes.
+- [ ] Tap an album: chapters appear with number, title and duration. Tap the 54-chapter Adventskalender: all 54 are listed (if the list stops short, a line says "Showing n of 54 chapters": send the log).
+- [ ] Tap a chapter: it plays, the bottom bar shows its title. Next and previous in the bottom bar move in order. Settings log shows `spotify chapter N -> row button` (or `row dblclick`). Try one chapter far down a long album.
+- [ ] "Play, or resume where you left off" starts where Spotify last was. Lock the screen: playback continues into the next chapter. Settings log shows `private pref ... applied`.
+- [ ] Back (chevron in the header) returns to the grid without stopping playback; reopening the same album is instant. Done stops playback; opening Spotify again does not reload the grid.
+- [ ] The globe button shows Spotify's own page (page back/forward appear in the bottom bar), the grid button returns.
+- [ ] Open `https://open.spotify.com/album/6UN8m07SmIzyDe63H0oljL` (not Die drei ???): the web page opens instead of the grid, fitted to the screen, pinch zooms in only.
 
 ## Sharing
 - [ ] The Shortcut from Settings > Sharing opens a shared link in the app.

@@ -46,7 +46,7 @@ struct BrowserView: View {
         .statusBarHidden(videoMode.active)
         .persistentSystemOverlays(videoMode.active ? .hidden : .automatic)
         .sheet(isPresented: $showLibrary) { LibraryView(model: model) }
-        .overlay { SpotifyOverlay(player: model.spotify, show: $model.showSpotify) }
+        .overlay { SpotifyOverlay(player: model.spotify, catalog: model.spotify.catalog, show: $model.showSpotify) }
         .sheet(isPresented: $showSettings) { SettingsView(model: model, blocker: blocker, detector: detector) }
         .onChange(of: model.url) { _, new in if !editing { text = new?.absoluteString ?? "" } }
         // Any navigation (site tile, address bar, deep link, clipboard) leaves the Sites page.
