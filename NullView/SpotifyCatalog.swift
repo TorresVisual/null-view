@@ -28,6 +28,10 @@ final class SpotifyCatalog: ObservableObject {
     /// the grid view, which is rebuilt every time an album is closed.
     @Published var shelf = Shelf.folgen
     @Published var hideListened = false
+    /// Flips the picked list (Folgen then run from the latest down to 1). Remembered across launches.
+    @Published var reversed = UserDefaults.standard.bool(forKey: "spotifyReversed") {
+        didSet { UserDefaults.standard.set(reversed, forKey: "spotifyReversed") }
+    }
     /// Album ids the user has heard: ticked by hand, or by the last chapter becoming the current track.
     @Published private(set) var listened: Set<String>
 
@@ -74,7 +78,8 @@ final class SpotifyCatalog: ObservableObject {
 
     /// The albums in the picked list. Not a stored copy: it follows `shelves`, `listened` and the toggle.
     var shown: [SpotifyAlbum] {
-        (shelf == .folgen ? shelves.folgen : shelves.specials).filter { !hideListened || !listened.contains($0.id) }
+        let list = (shelf == .folgen ? shelves.folgen : shelves.specials).filter { !hideListened || !listened.contains($0.id) }
+        return reversed ? list.reversed() : list
     }
 
     /// Fires on a change of the player's title only, so unticking while the last chapter still plays sticks.

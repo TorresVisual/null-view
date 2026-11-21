@@ -50,6 +50,7 @@ Before anything: `Core` (`swift test`) and `js` (`npm test`) are green, and the 
 - [ ] Tap a chapter: it plays, the bottom bar shows its title. Next and previous in the bottom bar move in order. Settings log shows `spotify chapter N -> row button` (or `row dblclick`). Try one chapter far down a long album.
 - [ ] "Play, or resume where you left off" starts where Spotify last was. Lock the screen: playback continues into the next chapter. Settings log shows `private pref ... applied`.
 - [ ] Listened, by hand: long-press a cover, "Mark as listened": checkmark and dimmed cover. In a chapter list the "Mark as listened" row does the same and shows "Listened. Tap to untick". Untick both ways. Force-quit and reopen: the ticks are still there. "Hide listened" hides them in the current list.
+- [ ] "Reverse" flips the picked list (Folgen run latest down to 1, Specials oldest first). Force-quit and reopen: it is still on.
 - [ ] Listened, automatically: open a short Folge, tap its second-to-last chapter, let it run into the last chapter: the Folge is ticked (log line `spotify listened: <name>`). Playing any earlier chapter ticks nothing. Skip straight to the last chapter (next button): ticks too. Untick while it still plays: stays unticked.
 - [ ] Back (chevron in the header) returns to the grid without stopping playback; reopening the same album is instant. Done stops playback; opening Spotify again does not reload the grid.
 - [ ] The globe button shows Spotify's own page (page back/forward appear in the bottom bar), the grid button returns.

@@ -64,7 +64,11 @@ private struct AlbumGridView: View {
                 Text("Specials \(catalog.shelves.specials.count)").tag(SpotifyCatalog.Shelf.specials)
             }
             .pickerStyle(.segmented)
-            Toggle("Hide listened", isOn: $catalog.hideListened).frame(minHeight: Theme.hit)
+            HStack(spacing: Theme.pad) {
+                Toggle("Hide listened", isOn: $catalog.hideListened)
+                Toggle("Reverse", isOn: $catalog.reversed)
+            }
+            .frame(minHeight: Theme.hit)
         }
         .padding(.horizontal, Theme.pad)
     }
