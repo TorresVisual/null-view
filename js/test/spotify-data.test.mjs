@@ -69,14 +69,20 @@ test('the same response is recorded twice when requested twice, and the backlog 
   assert.equal((await drain()).length, 100);
 });
 
-test('scrollStep moves one step at a time, wraps after the end, and ignores the sidebar', async () => {
+test('scrollStep moves half a viewport at a time, wraps after the end, ignores the sidebar, and reports where it is', async () => {
   await page.setContent(`<nav id="side" style="height:100px;overflow:auto"><div style="height:9000px"></div></nav>
     <main id="m" style="height:200px;overflow:auto"><div style="height:1000px"></div></main>`);
   const step = () => page.evaluate(() => [window.__nvSpotify.scrollStep(), document.getElementById('m').scrollTop, document.getElementById('side').scrollTop]);
-  assert.deepEqual(await step(), ['step', 160, 0]);
-  assert.equal((await step())[0], 'step');
-  for (let i = 0; i < 3; i++) await step();   // 160 * 5 = 800 = the end
-  assert.deepEqual(await step(), ['wrapped', 0, 0]);   // after reaching the end, the next call is back at the top
+  assert.deepEqual(await step(), ['step top=100 of 1000 client=200 el=main#m', 100, 0]);
+  for (let i = 0; i < 7; i++) await step();             // 100 * 8 = 800 = the end
+  assert.equal((await step())[0].split(' ')[0], 'wrapped');
+  assert.equal(await page.evaluate(() => document.getElementById('m').scrollTop), 0);   // back at the top
+});
+
+test('scrollStep moves every scrollable element in main, not just the tallest', async () => {
+  await page.setContent(`<main style="height:200px;overflow:auto"><div id="in" style="height:150px;overflow:auto"><div style="height:600px"></div></div><div style="height:1000px"></div></main>`);
+  await page.evaluate(() => window.__nvSpotify.scrollStep());
+  assert.deepEqual(await page.evaluate(() => [document.querySelector('main').scrollTop, document.getElementById('in').scrollTop]), [100, 75]);
 });
 
 test('playChapter clicks the row found by its track link, falls back to the row index, and says when it is not rendered', async () => {

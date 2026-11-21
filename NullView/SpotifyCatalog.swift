@@ -54,6 +54,7 @@ final class SpotifyCatalog: ObservableObject {
         await player.load(URL(string: "https://open.spotify.com/artist/\(SpotifyLink.artistID)/discography/all")!)
         var artist = SpotifyArtistPage()
         var stale = 0
+        var lastScroll = ""
         for step in 0..<200 {
             let before = artist.albums.count
             do {
@@ -64,9 +65,9 @@ final class SpotifyCatalog: ObservableObject {
             if artist.isComplete { grid = .ready; return }
             stale = artist.albums.count == before ? stale + 1 : 0
             if step >= 10, artist.total == nil { return fail(&grid, SpotifyFormatError(missing: "discography totalCount")) }
-            if stale >= 25 { grid = .failed("Got \(artist.albums.count) of \(artist.total ?? 0) albums."); return }
+            if stale >= 25 { grid = .failed("Got \(artist.albums.count) of \(artist.total ?? 0) albums (last scroll: \(lastScroll))."); return }
             grid = .loading(artist.total.map { "Loading albums \(artist.albums.count) of \($0)" } ?? "Loading albums…")
-            await scrollStep()
+            lastScroll = await scrollStep("albums \(artist.albums.count)/\(artist.total ?? 0)")
             guard await pause(1.2) else { return }
         }
         grid = .failed("Got \(artist.albums.count) of \(artist.total ?? 0) albums.")
@@ -115,7 +116,7 @@ final class SpotifyCatalog: ObservableObject {
             if stale >= 25 { break }
             // An album over 50 chapters: the page asks for the rest (offset 50) as its list is scrolled.
             if !chapters.isEmpty { detail = .loading("Loading chapters \(chapters.count) of \(list.expected)") }
-            await scrollStep()
+            await scrollStep("chapters \(chapters.count)/\(list.expected)")
             guard await pause(1.2) else { return }
         }
         guard !chapters.isEmpty else { detail = .failed("Spotify sent no chapters for this album."); return }
@@ -135,7 +136,7 @@ final class SpotifyCatalog: ObservableObject {
                 let r = await player.call("return window.__nvSpotify ? window.__nvSpotify.playChapter(uri, number) : 'no recorder'",
                                           ["uri": chapter.uri, "number": chapter.number])
                 if r != "not rendered" { player.note("spotify chapter \(chapter.number) -> \(r)"); player.refresh(); return }
-                await scrollStep()   // the row of a long album may be scrolled out of the virtualized list
+                await scrollStep("find chapter \(chapter.number)")   // the row of a long album may be scrolled out of the virtualized list
                 guard await pause(0.6) else { return }
             }
             player.note("spotify chapter \(chapter.number) -> its row never showed up")
@@ -171,7 +172,13 @@ final class SpotifyCatalog: ObservableObject {
         }
     }
 
-    private func scrollStep() async { _ = await player.eval("window.__nvSpotify ? window.__nvSpotify.scrollStep() : 'no recorder'") }
+    /// One scroll step; returns where the scroller is (see `scrollStep` in spotify-data.js) and logs it with the counts.
+    @discardableResult
+    private func scrollStep(_ what: String) async -> String {
+        let r = await player.eval("window.__nvSpotify ? window.__nvSpotify.scrollStep() : 'no recorder'") as? String ?? "?"
+        player.note("spotify \(what), \(r)")
+        return r
+    }
 
     /// False when the task was cancelled (back to the grid, another album).
     private func pause(_ seconds: Double) async -> Bool {

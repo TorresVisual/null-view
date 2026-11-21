@@ -45,15 +45,17 @@
     return xSend.apply(this, arguments);
   };
 
-  // The page lists are virtualized and page in on scroll, so the fetcher scrolls in steps (a jump skipped offsets).
-  const scroller = () => {
+  // The page lists are virtualized and page in as they are scrolled, so the fetcher scrolls in steps (a jump
+  // skipped offsets 140 to 180 in the spike). Every scrollable element in main moves, because which one the
+  // page watches is Spotify's business; the tallest one decides when the end is reached.
+  const scrollers = () => {
     const root = document.querySelector('main') || document.body;
-    let best = null;
-    for (const e of [root, ...root.querySelectorAll('*')]) {
-      if (e.scrollHeight > e.clientHeight + 50 && /auto|scroll/.test(getComputedStyle(e).overflowY) && (!best || e.scrollHeight > best.scrollHeight)) best = e;
-    }
-    return best || document.scrollingElement;
+    const all = [root, ...root.querySelectorAll('*')].filter((e) => e.scrollHeight > e.clientHeight + 50 && /auto|scroll/.test(getComputedStyle(e).overflowY));
+    const doc = document.scrollingElement;
+    if (doc && doc.scrollHeight > doc.clientHeight + 50) all.push(doc);
+    return all;
   };
+  const describe = (e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.classList[0] ? '.' + e.classList[0] : '');
 
   const rowFor = (uri, number) => {
     const id = uri.split(':').pop();
@@ -63,13 +65,15 @@
 
   window.__nvSpotify = {
     drain: () => recs.splice(0),
-    /** One viewport-sized step down the page's list; wraps to the top after the end. 'step', 'wrapped' or 'none'. */
+    /** Half a viewport down every scrollable element; wraps to the top after the end. Returns 'step', 'wrapped' or
+     *  'none' plus where the tallest scroller is, so the in-app log shows what happened when the list stalls. */
     scrollStep() {
-      const el = scroller();
-      if (!el) return 'none';
-      const end = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
-      el.scrollTop = end ? 0 : el.scrollTop + el.clientHeight * 0.8;
-      return end ? 'wrapped' : 'step';
+      const els = scrollers();
+      if (!els.length) return 'none';
+      const main = els.reduce((a, e) => (e.scrollHeight > a.scrollHeight ? e : a));
+      const end = main.scrollTop + main.clientHeight >= main.scrollHeight - 2;
+      for (const e of els) e.scrollTop = end ? 0 : e.scrollTop + e.clientHeight * 0.5;
+      return `${end ? 'wrapped' : 'step'} top=${Math.round(main.scrollTop)} of ${main.scrollHeight} client=${main.clientHeight} el=${describe(main)}`;
     },
     /** Plays that chapter's row. Returns which way it was clicked, or why not ('not rendered': scroll and retry). */
     playChapter(uri, number) {
