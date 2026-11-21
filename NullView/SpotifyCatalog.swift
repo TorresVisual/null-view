@@ -206,7 +206,12 @@ final class SpotifyCatalog: ObservableObject {
             for _ in 0..<40 {
                 let r = await player.call("return window.__nvSpotify ? window.__nvSpotify.playChapter(uri, number) : 'no recorder'",
                                           ["uri": chapter.uri, "number": chapter.number])
-                if r != "not rendered" { player.note("spotify chapter \(chapter.number) -> \(r)"); player.refresh(); return }
+                if r != "not rendered" {
+                    player.note("spotify chapter \(chapter.number) -> \(r)")
+                    await watchEnd(album)
+                    player.refresh()
+                    return
+                }
                 await scrollStep("find chapter \(chapter.number)")   // the row of a long album may be scrolled out of the virtualized list
                 guard await pause(0.6) else { return }
             }
@@ -223,8 +228,23 @@ final class SpotifyCatalog: ObservableObject {
             await showAlbumPage(album)
             let r = await player.eval("window.__nvSpotify ? window.__nvSpotify.playAlbum() : 'no recorder'") as? String ?? "?"
             player.note("spotify album play -> \(r)")
+            await watchEnd(album)
             player.refresh()
         }
+    }
+
+    /// Issue #20: hands the page the album's chapter titles so it pauses when the current track is no longer one
+    /// of them (Spotify's autoplay would otherwise carry on). The page does the watching, so it works with the
+    /// screen locked; the pause is logged as "spotify stop: left album ..." when `refresh` next collects it. Only
+    /// for a chapter list read in full: a partial one would stop playback at its own end.
+    private func watchEnd(_ album: SpotifyAlbum) async {
+        guard let list = complete[album.id] else {
+            player.note("spotify stop: not armed for \(album.name), chapter list incomplete")
+            return
+        }
+        let r = await player.call("return window.__nvSpotify ? window.__nvSpotify.watchAlbum(name, titles) : 'no recorder'",
+                                  ["name": album.name, "titles": list.map(\.title)])
+        player.note("spotify stop: \(r)")
     }
 
     /// Browsing to another album reloads the page, which stops what is playing (accepted, decisions.md "Spotify").

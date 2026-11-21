@@ -67,8 +67,42 @@
     return rows.find((r) => r.querySelector(`a[href*="/track/${id}"]`)) || rows.find((r) => r.getAttribute('aria-rowindex') === String(number + 1));
   };
 
+  // Issue #20: stop when the opened album ends, instead of Spotify's autoplay carrying on. Runs in the page (a
+  // timer here keeps going with the screen locked, as the page's own track hops do). The current track is the
+  // media-session title, the same source Swift reads. ponytail: matches by title, so an album that shares a
+  // chapter title with the next thing Spotify plays is not stopped; add the now-playing track id if that shows up.
+  let watch = null, watchTimer = 0;
+  const stopLog = [];
+  const nowTitle = () => (navigator.mediaSession?.metadata?.title || '').trim();
+  const pausePlayback = () => {
+    const b = document.querySelector('[data-testid="control-button-playpause"]');
+    if (b) return /pause/i.test(b.getAttribute('aria-label') || '') ? (b.click(), 'button') : 'not playing';
+    return window.__nv && navigator.mediaSession?.playbackState === 'playing' ? 'handler ' + window.__nv.cmd('playpause') : 'not playing';
+  };
+
   window.__nvSpotify = {
     drain: () => recs.splice(0),
+    /** Arms the stop: `titles` are the album's chapters. Armed only once a chapter has been heard, so what played
+     *  before the click is not mistaken for the end. One-shot: after it stops the album it disarms. */
+    watchAlbum(name, titles) {
+      clearInterval(watchTimer);
+      watch = { name, titles: new Set(titles.map((t) => t.trim())), seen: false };
+      watchTimer = setInterval(() => window.__nvSpotify.checkAlbum(), 1000);
+      return `watching ${watch.titles.size} chapters`;
+    },
+    checkAlbum() {
+      const t = nowTitle();
+      if (!watch || !t) return;
+      if (watch.titles.has(t)) { watch.seen = true; return; }
+      if (!watch.seen) return;
+      const how = pausePlayback();
+      if (how === 'not playing') return;   // already paused, or the button label lags: stay armed and look again next tick
+      stopLog.push(`stop: left album ${watch.name} (now "${t}", ${how})`);
+      watch = null;
+      clearInterval(watchTimer);
+    },
+    /** Lines for the in-app log, taken once; the page cannot call Swift, so Swift collects them when it next looks. */
+    takeLog: () => stopLog.splice(0),
     /** Half a viewport down every scrollable element; wraps to the top after the end. Returns 'step', 'wrapped' or
      *  'none' plus where the tallest scroller is, so the in-app log shows what happened when the list stalls. */
     scrollStep() {

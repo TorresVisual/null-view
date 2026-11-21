@@ -191,6 +191,10 @@ final class SpotifyPlayer: NSObject, ObservableObject, WKNavigationDelegate, WKU
                 self.title = o["title"] as? String ?? ""
             }
         }
+        // Lines the page wrote while nobody was looking (the stop at an album's end, issue #20).
+        webView.evaluateJavaScript("window.__nvSpotify ? window.__nvSpotify.takeLog() : []") { [weak self] r, _ in
+            MainActor.assumeIsolated { for line in r as? [String] ?? [] { self?.note("spotify \(line)") } }
+        }
     }
 
     func webView(_ w: WKWebView, createWebViewWith cfg: WKWebViewConfiguration,

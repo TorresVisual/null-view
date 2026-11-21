@@ -122,3 +122,46 @@ test('playAlbum clicks the action-bar play button', async () => {
   await page.setContent('<main></main>');
   assert.equal(await page.evaluate(() => window.__nvSpotify.playAlbum()), 'play button NOT found');
 });
+
+// Issue #20: stop when the album ends. The page reports the current track as the media-session title.
+const mockPlayer = (title, label = 'Pause') => page.evaluate(([t, l]) => {
+  Object.defineProperty(navigator, 'mediaSession', { value: { metadata: { title: t }, playbackState: 'playing' }, configurable: true });
+  document.body.innerHTML = `<button data-testid="control-button-playpause" aria-label="${l}" onclick="window.clicks=(window.clicks||0)+1"></button>`;
+}, [title, label]);
+const nowPlaying = (title) => page.evaluate((t) => { navigator.mediaSession.metadata.title = t; return window.__nvSpotify.checkAlbum(); }, title);
+const clicks = () => page.evaluate(() => window.clicks || 0);
+const log = () => page.evaluate(() => window.__nvSpotify.takeLog());
+
+test('watchAlbum pauses and logs when the playing track leaves the album, once', async () => {
+  await mockPlayer('Teil 1');
+  await page.evaluate(() => window.__nvSpotify.watchAlbum('Folge 1', ['Teil 1', 'Teil 2']));
+  await nowPlaying('Teil 1'); await nowPlaying('Teil 2');
+  assert.equal(await clicks(), 0);                          // inside the album: leave it alone
+  await nowPlaying('Some Recommendation');
+  assert.equal(await clicks(), 1);
+  assert.deepEqual(await log(), ['stop: left album Folge 1 (now "Some Recommendation", button)']);
+  assert.deepEqual(await log(), []);                        // taken once
+  await nowPlaying('Another One');
+  assert.equal(await clicks(), 1);                          // one-shot: the owner may press play again
+});
+
+test('watchAlbum does not stop on what was playing before the album started, and ignores an empty title', async () => {
+  await mockPlayer('Old Song');
+  await page.evaluate(() => window.__nvSpotify.watchAlbum('Folge 1', ['Teil 1']));
+  await nowPlaying('Old Song'); await nowPlaying('');
+  assert.equal(await clicks(), 0);                          // never saw an album chapter yet
+  await nowPlaying('Teil 1'); await nowPlaying('');
+  assert.equal(await clicks(), 0);
+});
+
+test('watchAlbum stays armed while paused (no click, no log) and stops once playing again', async () => {
+  await mockPlayer('Teil 1', 'Play');
+  await page.evaluate(() => { navigator.mediaSession.playbackState = 'paused'; window.__nvSpotify.watchAlbum('Folge 1', ['Teil 1']); });
+  await nowPlaying('Teil 1'); await nowPlaying('Other');
+  assert.equal(await clicks(), 0);
+  assert.deepEqual(await log(), []);
+  await page.evaluate(() => document.querySelector('button').setAttribute('aria-label', 'Pause'));
+  await nowPlaying('Other');
+  assert.equal(await clicks(), 1);
+  assert.match((await log())[0], /^stop: left album Folge 1 \(now "Other", button\)$/);
+});
