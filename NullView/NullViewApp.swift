@@ -9,8 +9,12 @@ struct NullViewApp: App {
     init() {
         // .playback lets video audio play with the silent switch on and in the background.
         try? AVAudioSession.sharedInstance().setCategory(.playback)
-        // Phase 0 (where background audio passed) also activated the session up front; Phase 1 dropped that.
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // Phase 0 (where background audio passed) activated the session up front; commit 1b7e8b0 put that back.
+        // It may keep the app awake while locked (battery investigation), so Settings > Advanced can switch it off
+        // (takes effect on the next launch). Default on = the old behaviour.
+        if UserDefaults.standard.object(forKey: IdleProbe.activateKey) as? Bool ?? true {
+            try? AVAudioSession.sharedInstance().setActive(true)
+        }
     }
 
     var body: some Scene {

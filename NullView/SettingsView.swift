@@ -7,6 +7,7 @@ struct SettingsView: View {
     @ObservedObject var detector: VideoDetector
     @Environment(\.dismiss) private var dismiss
     @AppStorage(BrowserModel.searchTemplateKey) private var template = AddressInput.defaultSearchTemplate
+    @AppStorage(IdleProbe.activateKey) private var activateAudio = true
     @State private var confirmClear = false
     @State private var cleared = false
 
@@ -39,9 +40,12 @@ struct SettingsView: View {
                 } header: { Text("Privacy") } footer: {
                     Text("Nothing leaves this device except the pages you open.")
                 }
-                Section("Advanced") {
+                Section {
                     NavigationLink("Custom rules") { CustomRulesView(blocker: blocker) }
                     NavigationLink("Video detection log") { DetectionLogView(detector: detector) }
+                    Toggle("Audio session on at launch", isOn: $activateAudio)
+                } header: { Text("Advanced") } footer: {
+                    Text("For battery testing. Takes effect the next time the app starts. Off: the audio session starts when a page first plays.")
                 }
             }
             .navigationTitle("Settings")

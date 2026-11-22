@@ -26,6 +26,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     let sites: Sites
     let spotify: SpotifyPlayer
     let picker: ElementPicker
+    let idle: IdleProbe   // temporary: battery investigation, see IdleProbe.swift
     @Published var showSpotify = false
     /// The last popup the page tried to open on its own; the banner offers to open it anyway.
     @Published var blockedPopup: URL?
@@ -58,6 +59,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         blocker = Blocker(userContentController: cfg.userContentController, persistentScripts: scripts)
         det.webView = webView
         videoMode = VideoMode(detector: det, webView: webView)
+        idle = IdleProbe(webView: webView) { [weak det] in det?.note($0) }
         let store: LibraryStore = db ?? MemoryLibraryStore()
         let siteStore: SiteStore = db ?? MemorySiteStore()
         sites = Sites(store: siteStore)

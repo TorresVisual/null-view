@@ -54,6 +54,7 @@ struct BrowserView: View {
         .onChange(of: editing) { _, now in if !now { text = model.url?.absoluteString ?? "" } }
         .onChange(of: scenePhase) { _, p in
             detector.note("app \(p)")
+            model.idle.phase(p)
             if p != .active { watch.flush() }
             // Issue #23. Not .inactive: Control Center and alerts pass through it. On return, the page may have been paused
             // from the lock screen after the background check; with the overlay open the user is looking at it, so leave it.

@@ -91,7 +91,9 @@
   // Attaching a shadow root is not a DOM mutation anyone can observe, so a player that builds its shadow tree
   // after it was inserted would be missed. Rescan now and then; an unchanged report is not re-sent.
   // ponytail: a full tree walk every 1.5 s. Hook attachShadow in the page world if that ever shows up in a profile.
-  setInterval(() => schedule(0), 1500);
+  // __nvTicks: read by native IdleProbe (battery investigation) to see whether this timer ran while the phone was locked.
+  window.__nvTicks = 0;
+  setInterval(() => { window.__nvTicks++; schedule(0); }, 1500);
   addEventListener('pagehide', () => post({ type: 'gone', frame }));
   addEventListener('pageshow', () => { last = ''; schedule(0); }); // back/forward cache restore
   addEventListener('resize', () => schedule(250));
